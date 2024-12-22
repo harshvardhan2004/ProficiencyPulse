@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Add Skill{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                <h1 class="display-6 fw-bold text-primary mb-0">Add Skill</h1>
+                <p class="text-muted mt-2">Add a new skill to track in the matrix</p>
+            </div>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-2"></i>Back
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="row g-4">
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="name" name="name" required>
+                                <label for="name">Skill Name</label>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <textarea class="form-control" id="description" name="description" style="height: 100px"></textarea>
+                                <label for="description">Description</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="requires_training" name="requires_training">
+                                        <label class="form-check-label" for="requires_training">
+                                            <strong>Requires Formal Training</strong>
+                                        </label>
+                                    </div>
+                                    
+                                    <div id="trainingDetails" class="mt-4" style="display: none;">
+                                        <div class="row g-4">
+                                            <div class="col-md-6">
+                                                <div class="form-floating">
+                                                    <input type="number" class="form-control" id="training_expiry_months" name="training_expiry_months" min="1">
+                                                    <label for="training_expiry_months">Validity Period (months)</label>
+                                                    <div class="form-text mt-2">Leave blank if training doesn't expire</div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-12">
+                                                <div class="form-floating">
+                                                    <textarea class="form-control" id="training_details" name="training_details" style="height: 100px"
+                                                            placeholder="Specify training requirements"></textarea>
+                                                    <label for="training_details">Training Requirements</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <hr class="my-4">
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-plus-circle me-2"></i>Add Skill
+                                </button>
+                                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancel</a>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-floating > label {
+    padding-left: 1.25rem;
+}
+.form-floating > .form-control,
+.form-floating > .form-select {
+    height: calc(3.5rem + 2px);
+    line-height: 1.25;
+}
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label,
+.form-floating > .form-select ~ label {
+    transform: scale(.85) translateY(-1rem) translateX(.15rem);
+}
+.form-check-input {
+    width: 3em;
+    height: 1.5em;
+    margin-top: 0;
+    margin-right: 1rem;
+}
+.form-switch .form-check-input {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%280, 0, 0, 0.25%29'/%3e%3c/svg%3e");
+}
+.form-switch .form-check-input:checked {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+}
+</style>
+
+<script>
+document.getElementById('requires_training').addEventListener('change', function() {
+    document.getElementById('trainingDetails').style.display = this.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %} 

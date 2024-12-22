@@ -1,0 +1,8 @@
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.0.23
+Flask-WTF==1.2.1
+python-dotenv==1.0.0
+PyMySQL==1.1.0
+cryptography==41.0.7  # Required for PyMySQL with modern MySQL servers
+waitress==2.1.2  # WSGI server for production deployment

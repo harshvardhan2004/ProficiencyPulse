@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1 class="display-5 fw-bold text-primary mb-0">Admin Panel</h1>
+        <p class="text-muted mt-2">Manage projects, employee levels, and skills</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Matrix
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Projects Section -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Projects</h5>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addProjectModal">
+                        <i class="fas fa-plus me-2"></i>Add Project
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Project Name</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for project in projects %}
+                                <tr>
+                                    <td>{{ project.name }}</td>
+                                    <td class="text-end">
+                                        <form action="{{ url_for('admin_delete_project', project_id=project.id) }}" 
+                                              method="POST" 
+                                              class="d-inline"
+                                              onsubmit="return confirm('Are you sure you want to delete this project?');">
+                                            <button type="submit" class="btn btn-danger btn-sm">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">
+                                        No projects added yet
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Levels Section -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Employee Levels</h5>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addLevelModal">
+                        <i class="fas fa-plus me-2"></i>Add Level
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Order</th>
+                                <th>Level Name</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for level in levels %}
+                                <tr>
+                                    <td>{{ level.order }}</td>
+                                    <td>{{ level.name }}</td>
+                                    <td class="text-end">
+                                        <form action="{{ url_for('admin_delete_level', level_id=level.id) }}" 
+                                              method="POST" 
+                                              class="d-inline"
+                                              onsubmit="return confirm('Are you sure you want to delete this level?');">
+                                            <button type="submit" class="btn btn-danger btn-sm">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        No levels added yet
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skills Section -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Skills Management</h5>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSkillModal">
+                        <i class="fas fa-plus me-2"></i>Add Skill
+                    </button>
+                </div>
+                <!-- Add search form -->
+                <div class="mt-3">
+                    <form method="GET" class="d-flex gap-2">
+                        <div class="flex-grow-1">
+                            <div class="input-group">
+                                <input type="text" 
+                                       class="form-control" 
+                                       placeholder="Search skills..." 
+                                       name="skill_search"
+                                       value="{{ skill_search }}">
+                                <button class="btn btn-outline-primary" type="submit">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                                {% if skill_search %}
+                                    <a href="{{ url_for('admin') }}" class="btn btn-outline-secondary">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Skill Name</th>
+                                <th>Description</th>
+                                <th>Training Required</th>
+                                <th>Training Validity</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for skill in skills.items %}
+                                <tr>
+                                    <td>{{ skill.name }}</td>
+                                    <td>{{ skill.description or '-' }}</td>
+                                    <td>
+                                        {% if skill.requires_training %}
+                                            <span class="badge bg-info">
+                                                <i class="fas fa-check me-1"></i>Yes
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if skill.training_expiry_months %}
+                                            {{ skill.training_expiry_months }} months
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <button type="button" 
+                                                class="btn btn-primary btn-sm"
+                                                onclick="editSkill({{ skill.id }}, '{{ skill.name }}', '{{ skill.description or '' }}', {{ 'true' if skill.requires_training else 'false' }}, {{ skill.training_expiry_months or 0 }}, '{{ skill.training_details or '' }}')"
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editSkillModal">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <form action="{{ url_for('admin_delete_skill', skill_id=skill.id) }}" 
+                                              method="POST" 
+                                              class="d-inline"
+                                              onsubmit="return confirm('Are you sure you want to delete this skill?');">
+                                            <button type="submit" class="btn btn-danger btn-sm">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        {% if skill_search %}
+                                            No skills found matching your search
+                                        {% else %}
+                                            No skills added yet
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                {% if skills.pages > 1 %}
+                    <div class="card-footer bg-white">
+                        <nav aria-label="Skill pages">
+                            <ul class="pagination justify-content-center mb-0">
+                                <!-- Previous page -->
+                                <li class="page-item {{ 'disabled' if not skills.has_prev }}">
+                                    <a class="page-link" 
+                                       href="{{ url_for('admin', page=skills.prev_num, skill_search=skill_search) if skills.has_prev else '#' }}">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </a>
+                                </li>
+                                
+                                <!-- Page numbers -->
+                                {% for page_num in range(1, skills.pages + 1) %}
+                                    <li class="page-item {{ 'active' if page_num == skills.page }}">
+                                        <a class="page-link" 
+                                           href="{{ url_for('admin', page=page_num, skill_search=skill_search) }}">
+                                            {{ page_num }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                                
+                                <!-- Next page -->
+                                <li class="page-item {{ 'disabled' if not skills.has_next }}">
+                                    <a class="page-link" 
+                                       href="{{ url_for('admin', page=skills.next_num, skill_search=skill_search) if skills.has_next else '#' }}">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Users Management -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Admin Users</h5>
+            <button type="button" 
+                    class="btn btn-primary btn-sm" 
+                    data-bs-toggle="modal" 
+                    data-bs-target="#addAdminModal">
+                <i class="fas fa-user-plus me-2"></i>Add Admin
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Job Title</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for admin in admins %}
+                            <tr>
+                                <td>{{ admin.name }}</td>
+                                <td>{{ admin.email }}</td>
+                                <td>{{ admin.job_title }}</td>
+                                <td>
+                                    {% if admin.id != current_employee_id %}
+                                        <form action="{{ url_for('admin_remove_admin', employee_id=admin.id) }}" 
+                                              method="POST" 
+                                              class="d-inline"
+                                              onsubmit="return confirm('Are you sure you want to remove admin privileges from this user?');">
+                                            <button type="submit" class="btn btn-danger btn-sm">
+                                                <i class="fas fa-user-minus"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Admin Modal -->
+    <div class="modal fade" id="addAdminModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Admin</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('admin_add_admin') }}" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="job_title" class="form-label">Job Title</label>
+                            <input type="text" class="form-control" id="job_title" name="job_title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="level_id" class="form-label">Level</label>
+                            <select class="form-select" id="level_id" name="level_id" required>
+                                {% for level in levels %}
+                                    <option value="{{ level.id }}">{{ level.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Admin</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Project Modal -->
+<div class="modal fade" id="addProjectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('admin_add_project') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Project</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating">
+                        <input type="text" class="form-control" id="projectName" name="name" required>
+                        <label for="projectName">Project Name</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Project
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Level Modal -->
+<div class="modal fade" id="addLevelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{{ url_for('admin_add_level') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Level</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="levelName" name="name" required>
+                        <label for="levelName">Level Name</label>
+                    </div>
+                    <div class="form-floating">
+                        <input type="number" class="form-control" id="levelOrder" name="order" required min="1">
+                        <label for="levelOrder">Display Order</label>
+                        <div class="form-text">Lower numbers appear first</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Level
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Skill Modal -->
+<div class="modal fade" id="addSkillModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form action="{{ url_for('admin_add_skill') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Skill</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="skillName" name="name" required>
+                                <label for="skillName">Skill Name</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <textarea class="form-control" id="skillDescription" name="description" style="height: 100px"></textarea>
+                                <label for="skillDescription">Description</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="requiresTraining" name="requires_training">
+                                        <label class="form-check-label" for="requiresTraining">
+                                            <strong>Requires Formal Training</strong>
+                                        </label>
+                                    </div>
+                                    
+                                    <div id="trainingDetailsSection" class="mt-3" style="display: none;">
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <div class="form-floating">
+                                                    <input type="number" class="form-control" id="trainingExpiryMonths" name="training_expiry_months" min="1">
+                                                    <label for="trainingExpiryMonths">Validity Period (months)</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div class="form-floating">
+                                                    <textarea class="form-control" id="trainingDetails" name="training_details" style="height: 100px"></textarea>
+                                                    <label for="trainingDetails">Training Requirements</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Skill
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Skill Modal -->
+<div class="modal fade" id="editSkillModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="editSkillForm" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Skill</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="editSkillName" name="name" required>
+                                <label for="editSkillName">Skill Name</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <textarea class="form-control" id="editSkillDescription" name="description" style="height: 100px"></textarea>
+                                <label for="editSkillDescription">Description</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="editRequiresTraining" name="requires_training">
+                                        <label class="form-check-label" for="editRequiresTraining">
+                                            <strong>Requires Formal Training</strong>
+                                        </label>
+                                    </div>
+                                    
+                                    <div id="editTrainingDetailsSection" class="mt-3" style="display: none;">
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <div class="form-floating">
+                                                    <input type="number" class="form-control" id="editTrainingExpiryMonths" name="training_expiry_months" min="1">
+                                                    <label for="editTrainingExpiryMonths">Validity Period (months)</label>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div class="form-floating">
+                                                    <textarea class="form-control" id="editTrainingDetails" name="training_details" style="height: 100px"></textarea>
+                                                    <label for="editTrainingDetails">Training Requirements</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Update Skill
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Training details toggle for Add Skill modal
+document.getElementById('requiresTraining').addEventListener('change', function() {
+    document.getElementById('trainingDetailsSection').style.display = this.checked ? 'block' : 'none';
+});
+
+// Training details toggle for Edit Skill modal
+document.getElementById('editRequiresTraining').addEventListener('change', function() {
+    document.getElementById('editTrainingDetailsSection').style.display = this.checked ? 'block' : 'none';
+});
+
+// Function to populate edit skill modal
+function editSkill(id, name, description, requiresTraining, expiryMonths, trainingDetails) {
+    const form = document.getElementById('editSkillForm');
+    form.action = `/admin/skill/edit/${id}`;
+    
+    document.getElementById('editSkillName').value = name;
+    document.getElementById('editSkillDescription').value = description;
+    document.getElementById('editRequiresTraining').checked = requiresTraining;
+    document.getElementById('editTrainingExpiryMonths').value = expiryMonths || '';
+    document.getElementById('editTrainingDetails').value = trainingDetails;
+    
+    document.getElementById('editTrainingDetailsSection').style.display = requiresTraining ? 'block' : 'none';
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISV Skills Matrix - {% block title %}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --mbda-red: #E3001B;
+            --mbda-dark: #1A1A1A;
+            --mbda-grey: #4A4A4A;
+            --mbda-light-grey: #F5F5F5;
+        }
+        body {
+            background-color: var(--mbda-light-grey);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--mbda-dark);
+        }
+        .navbar {
+            background: var(--mbda-dark);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            padding: 1rem 0;
+            border-bottom: 3px solid var(--mbda-red);
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: white !important;
+        }
+        .navbar-brand .team-name {
+            color: var(--mbda-red);
+            font-weight: 700;
+        }
+        .nav-link {
+            font-weight: 500;
+            padding: 0.5rem 1rem !important;
+            border-radius: 0.5rem;
+            margin: 0 0.25rem;
+            transition: all 0.2s ease;
+            color: rgba(255,255,255,0.9) !important;
+        }
+        .nav-link:hover {
+            background-color: var(--mbda-red);
+            color: white !important;
+        }
+        .card {
+            border: none;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: white;
+            border-bottom: 2px solid var(--mbda-light-grey);
+            padding: 1.5rem;
+        }
+        .card-body {
+            padding: 1.5rem;
+        }
+        .btn {
+            padding: 0.5rem 1.5rem;
+            font-weight: 500;
+            border-radius: 0.3rem;
+            transition: all 0.2s ease;
+        }
+        .btn-primary {
+            background-color: var(--mbda-red);
+            border-color: var(--mbda-red);
+        }
+        .btn-primary:hover, .btn-primary:focus {
+            background-color: #c0001b;
+            border-color: #c0001b;
+            transform: translateY(-1px);
+        }
+        .btn-outline-primary {
+            color: var(--mbda-red);
+            border-color: var(--mbda-red);
+        }
+        .btn-outline-primary:hover {
+            background-color: var(--mbda-red);
+            border-color: var(--mbda-red);
+        }
+        .form-control, .form-select {
+            border-radius: 0.3rem;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e5e7eb;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--mbda-red);
+            box-shadow: 0 0 0 2px rgba(227, 0, 27, 0.1);
+        }
+        .alert {
+            border-radius: 0.3rem;
+            border: none;
+            padding: 1rem 1.5rem;
+        }
+        .table {
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .table th {
+            background-color: var(--mbda-dark);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+            letter-spacing: 0.05em;
+            border-bottom: 2px solid var(--mbda-red);
+        }
+        .badge {
+            padding: 0.5em 1em;
+            font-weight: 500;
+            border-radius: 0.3rem;
+        }
+        .bg-primary {
+            background-color: var(--mbda-red) !important;
+        }
+        .text-primary {
+            color: var(--mbda-red) !important;
+        }
+        .bg-secondary {
+            background-color: var(--mbda-grey) !important;
+        }
+        .modal-header {
+            background-color: var(--mbda-dark);
+            color: white;
+            border-bottom: 2px solid var(--mbda-red);
+        }
+        .modal-header .btn-close {
+            filter: invert(1) grayscale(100%) brightness(200%);
+        }
+        .avatar-initial {
+            background-color: var(--mbda-red) !important;
+        }
+        .alert-success {
+            background-color: #dff0d8;
+            border-left: 4px solid #28a745;
+            color: #0f5132;
+        }
+        .alert-danger {
+            background-color: #f8d7da;
+            border-left: 4px solid var(--mbda-red);
+            color: #842029;
+        }
+        .display-5, .display-6 {
+            color: var(--mbda-dark);
+        }
+        .display-5 .highlight, .display-6 .highlight {
+            color: var(--mbda-red);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-chart-network me-2"></i>MBDA <span class="team-name">ISV</span> Skills Matrix
+            </a>
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    {% if session.get('employee_id') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('index') }}">
+                                <i class="fas fa-home me-2"></i>Home
+                            </a>
+                        </li>
+                        {% if session.get('is_admin') %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('admin') }}">
+                                    <i class="fas fa-cogs me-2"></i>Admin
+                                </a>
+                            </li>
+                        {% endif %}
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    {% if session.get('employee_id') %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="mailto:FTN.ISVDashboard@mbda.co.uk?subject=Skills%20Matrix%20Help">
+                                <i class="fas fa-question-circle me-2"></i>Get Help
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#userGuideModal">
+                                <i class="fas fa-book me-2"></i>User Guide
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% include 'user_guide.html' %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

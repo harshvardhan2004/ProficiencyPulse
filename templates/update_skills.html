@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Update Skills - {{ employee.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Update Skills for {{ employee.name }}</h2>
+                <div class="text-muted">{{ employee.job_title }} - {{ employee.level }}</div>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {% for skill in skills %}
+                        {% set employee_skill = employee.skills|selectattr('skill_id', 'equalto', skill.id)|first %}
+                        <div class="mb-4">
+                            <label class="form-label">
+                                <strong>{{ skill.name }}</strong>
+                                {% if skill.description %}
+                                    <small class="text-muted d-block">{{ skill.description }}</small>
+                                {% endif %}
+                                {% if skill.requires_training %}
+                                    <div class="badge bg-info text-white mt-1">Requires Training</div>
+                                    {% if skill.training_expiry_months %}
+                                        <div class="badge bg-warning text-dark">Expires after {{ skill.training_expiry_months }} months</div>
+                                    {% endif %}
+                                {% endif %}
+                            </label>
+                            
+                            {% if skill.training_details %}
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i> Training Requirements:
+                                    <p class="mb-0">{{ skill.training_details }}</p>
+                                </div>
+                            {% endif %}
+
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="btn-group w-100" role="group">
+                                        {% for level in range(1, 6) %}
+                                            <input type="radio" 
+                                                   class="btn-check" 
+                                                   name="skill_{{ skill.id }}" 
+                                                   id="skill_{{ skill.id }}_{{ level }}" 
+                                                   value="{{ level }}"
+                                                   {% if employee_skill and employee_skill.proficiency_level == level %}checked{% endif %}
+                                                   autocomplete="off">
+                                            <label class="btn btn-outline-primary" for="skill_{{ skill.id }}_{{ level }}">
+                                                {{ level }}
+                                                {% if level == 1 %}
+                                                    <small class="d-block">Beginner</small>
+                                                {% elif level == 3 %}
+                                                    <small class="d-block">Intermediate</small>
+                                                {% elif level == 5 %}
+                                                    <small class="d-block">Expert</small>
+                                                {% endif %}
+                                            </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                
+                                {% if skill.requires_training %}
+                                    <div class="col-md-4">
+                                        <label class="form-label">Last Training Date</label>
+                                        <input type="date" 
+                                               class="form-control" 
+                                               name="training_date_{{ skill.id }}"
+                                               value="{{ employee_skill.last_training_date if employee_skill and employee_skill.last_training_date else '' }}"
+                                               {% if not employee_skill or employee_skill.proficiency_level == 0 %}disabled{% endif %}>
+                                        {% if employee_skill and employee_skill.training_expiry_date %}
+                                            <small class="text-{% if employee_skill.training_expiry_date < today %}danger{% else %}info{% endif %}">
+                                                Expires: {{ employee_skill.training_expiry_date.strftime('%Y-%m-%d') }}
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                    
+                    {% if skills %}
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Update Skills</button>
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            No skills available. Please <a href="{{ url_for('add_skill') }}">add some skills</a> first.
+                        </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.btn-check').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+        const skillId = this.name.split('_')[1];
+        const trainingDateInput = document.querySelector(`input[name="training_date_${skillId}"]`);
+        if (trainingDateInput) {
+            trainingDateInput.disabled = this.value === '0';
+        }
+    });
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col">
+        <h1 class="display-5 fw-bold text-primary mb-0">Skills Matrix</h1>
+        <p class="text-muted mt-2">Track and manage team skills</p>
+    </div>
+    <div class="col-md-4">
+        <form method="GET" class="search-form">
+            <div class="input-group">
+                <input type="text" 
+                       class="form-control" 
+                       placeholder="Search employees..." 
+                       name="search"
+                       value="{{ search_query }}"
+                       aria-label="Search employees">
+                <button class="btn btn-outline-primary" type="submit">
+                    <i class="fas fa-search"></i>
+                </button>
+                {% if search_query %}
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+    <div class="col-auto">
+        <div class="btn-group">
+            {% if is_admin %}
+                <a href="{{ url_for('add_employee') }}" class="btn btn-primary">
+                    <i class="fas fa-user-plus me-2"></i>Add Employee
+                </a>
+                <a href="{{ url_for('add_skill') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-plus-circle me-2"></i>Add Skill
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if not employees %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-users text-muted mb-3" style="font-size: 3rem;"></i>
+            <h3 class="text-muted">No employees yet</h3>
+            <p class="text-muted mb-4">Start by adding your first team member</p>
+            <a href="{{ url_for('add_employee') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-user-plus me-2"></i>Add Employee
+            </a>
+        </div>
+    </div>
+{% else %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="min-width: 250px;">Employee</th>
+                        <th class="text-center">Skills</th>
+                        <th class="text-center">Training Required</th>
+                        <th class="text-center">Training Expired</th>
+                        <th class="text-end" style="width: 150px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for employee in employees %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="flex-shrink-0">
+                                        <div class="avatar-initial bg-primary text-white rounded-circle">
+                                            {{ employee.name[:1] }}
+                                        </div>
+                                    </div>
+                                    <div class="ms-3">
+                                        <h6 class="mb-1">{{ employee.name }}</h6>
+                                        <div class="d-flex align-items-center flex-wrap">
+                                            <span class="badge bg-primary me-2">{{ employee.job_title }}</span>
+                                            <span class="badge bg-secondary me-2">{{ employee.level_rel.name }}</span>
+                                            {% if employee.clock_id %}
+                                                <span class="badge bg-info">
+                                                    <i class="fas fa-clock me-1"></i>{{ employee.clock_id }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        {% if employee.project_rel %}
+                                            <small class="text-muted d-block mt-1">
+                                                <i class="fas fa-project-diagram me-1"></i>{{ employee.project_rel.name }}
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center align-middle">
+                                {% set skill_count = employee.skills|length %}
+                                <h4 class="mb-0">{{ skill_count }}</h4>
+                                <small class="text-muted">of {{ skills|length }} total</small>
+                            </td>
+                            <td class="text-center align-middle">
+                                {% set training_required = employee.skills|selectattr('skill.requires_training', 'true')|list|length %}
+                                {% if training_required > 0 %}
+                                    <span class="badge bg-warning">{{ training_required }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center align-middle">
+                                {% set expired_count = employee.skills|selectattr('training_expiry_date', 'defined')|selectattr('training_expiry_date', 'ne', None)|selectattr('training_expiry_date', 'lt', today)|list|length %}
+                                {% if expired_count > 0 %}
+                                    <span class="badge bg-danger">{{ expired_count }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end align-middle">
+                                <div class="btn-group">
+                                    <a href="{{ url_for('employee_report', employee_id=employee.id) }}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-chart-bar me-1"></i>Report
+                                    </a>
+                                    {% if is_admin %}
+                                        <a href="{{ url_for('edit_employee', employee_id=employee.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-user-edit me-1"></i>Edit
+                                        </a>
+                                    {% endif %}
+                                    {% if is_admin or current_employee_id == employee.id %}
+                                        <a href="{{ url_for('update_employee_skills', employee_id=employee.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit me-1"></i>Skills
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+{% if not skills %}
+    <div class="card mt-4">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-lightbulb text-muted mb-3" style="font-size: 3rem;"></i>
+            <h3 class="text-muted">No skills defined</h3>
+            <p class="text-muted mb-4">Start by adding skills to track</p>
+            <a href="{{ url_for('add_skill') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-plus-circle me-2"></i>Add Skill
+            </a>
+        </div>
+    </div>
+{% endif %}
+
+<style>
+.avatar-initial {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 1.2rem;
+}
+.skill-stars {
+    font-size: 0.9rem;
+}
+.search-form .input-group {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.search-form .form-control {
+    border-right: none;
+    padding-left: 1rem;
+}
+.search-form .form-control:focus {
+    box-shadow: none;
+    border-color: var(--mbda-red);
+}
+.search-form .btn {
+    border-color: #ced4da;
+    background: white;
+}
+.search-form .btn:hover {
+    background: var(--mbda-light-grey);
+}
+.search-form .btn-outline-primary {
+    border-left: none;
+}
+.search-form .btn-outline-primary:hover {
+    background: var(--mbda-red);
+    border-color: var(--mbda-red);
+    color: white;
+}
+</style>
+
+<script>
+// Initialize tooltips
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl)
+})
+</script>
+{% endblock %} 

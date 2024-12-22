@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="text-center mb-4">
+            <h1 class="display-6 fw-bold text-primary mb-0">ISV Skills Matrix</h1>
+            <p class="text-muted mt-2">Sign in to access your skills</p>
+        </div>
+        
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-4">
+                        <div class="form-floating">
+                            <input type="text" class="form-control" id="identifier" name="identifier" required>
+                            <label for="identifier">Email or Clock ID</label>
+                        </div>
+                        <div class="form-text">
+                            Enter your email (for admins) or Clock ID (for employees)
+                        </div>
+                    </div>
+                    
+                    <div id="passwordSection" class="mb-4" style="display: none;">
+                        <div class="form-floating">
+                            <input type="password" class="form-control" id="password" name="password">
+                            <label for="password">Password</label>
+                        </div>
+                        <div class="form-text">
+                            Password required for admin login only
+                        </div>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" 
+                               class="form-check-input" 
+                               id="remember" 
+                               name="remember">
+                        <label class="form-check-label" for="remember">
+                            Remember me
+                        </label>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-sign-in-alt me-2"></i>Sign In
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('identifier').addEventListener('input', function() {
+    const value = this.value.toLowerCase();
+    const passwordSection = document.getElementById('passwordSection');
+    const passwordInput = document.getElementById('password');
+    
+    // Show password field if it looks like an email (admin login)
+    if (value.includes('@')) {
+        passwordSection.style.display = 'block';
+        passwordInput.required = true;
+    } else {
+        passwordSection.style.display = 'none';
+        passwordInput.required = false;
+    }
+});
+</script>
+{% endblock %} 

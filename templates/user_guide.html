@@ -1,0 +1,182 @@
+<style>
+    /* Override the base template nav-link styles for the user guide tabs */
+    #userGuideModal .nav-link {
+        color: var(--mbda-grey) !important;
+        background-color: transparent;
+        border-radius: 0;
+        margin: 0;
+        padding: 0.75rem 1.25rem !important;
+        transition: color 0.2s ease;
+    }
+
+    #userGuideModal .nav-link:hover {
+        color: var(--mbda-red) !important;
+        background-color: transparent;
+    }
+
+    #userGuideModal .nav-link.active {
+        color: var(--mbda-red) !important;
+        font-weight: 600;
+        border-bottom: 2px solid var(--mbda-red);
+    }
+</style>
+
+<!-- User Guide Modal -->
+<div class="modal fade" id="userGuideModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-book me-2"></i>User Guide
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-tabs mb-4" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-bs-toggle="tab" href="#standardUserGuide">
+                            <i class="fas fa-user me-2"></i>Standard User Guide
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#adminGuide">
+                            <i class="fas fa-user-shield me-2"></i>Admin Guide
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Standard User Guide -->
+                    <div class="tab-pane fade show active" id="standardUserGuide">
+                        <h4 class="mb-4">Getting Started</h4>
+                        
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-sign-in-alt me-2"></i>Logging In</h5>
+                                <p>To access the Skills Matrix:</p>
+                                <ol>
+                                    <li>Enter your Clock ID in the login field</li>
+                                    <li>Click "Sign In"</li>
+                                    <li>Optional: Check "Remember me" to stay logged in for 31 days</li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-tasks me-2"></i>Viewing Your Skills</h5>
+                                <p>On the main dashboard, you can:</p>
+                                <ul>
+                                    <li>See your current skill levels</li>
+                                    <li>Check training certification status</li>
+                                    <li>Monitor expiry dates for required training</li>
+                                    <li>View your detailed skill report</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-star-half-alt me-2"></i>Updating Your Skills</h5>
+                                <p>To update your skill levels:</p>
+                                <ol>
+                                    <li>Click "Update Skills" on your profile</li>
+                                    <li>Set proficiency levels (1-5 stars)</li>
+                                    <li>Add training dates where required</li>
+                                    <li>Click "Save Changes"</li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-certificate me-2"></i>Training Records</h5>
+                                <p>Managing your training records:</p>
+                                <ul>
+                                    <li>View required training for each skill</li>
+                                    <li>Check training expiry dates</li>
+                                    <li>Update training completion dates</li>
+                                    <li>Monitor certification status</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Admin Guide -->
+                    <div class="tab-pane fade" id="adminGuide">
+                        <h4 class="mb-4">Administrative Functions</h4>
+
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-users-cog me-2"></i>Employee Management</h5>
+                                <p>Managing employees:</p>
+                                <ul>
+                                    <li>Add new employees with their details</li>
+                                    <li>Assign projects and levels</li>
+                                    <li>Update employee information</li>
+                                    <li>View comprehensive skill reports</li>
+                                    <li>Search and filter employee records</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-cogs me-2"></i>Skills Management</h5>
+                                <p>Managing the skills database:</p>
+                                <ul>
+                                    <li>Add new skills with descriptions</li>
+                                    <li>Set training requirements</li>
+                                    <li>Configure expiry periods</li>
+                                    <li>Update existing skills</li>
+                                    <li>Search and filter skills</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-project-diagram me-2"></i>Project & Level Management</h5>
+                                <p>Organizing the team structure:</p>
+                                <ul>
+                                    <li>Create and manage projects</li>
+                                    <li>Define employee levels/grades</li>
+                                    <li>Set level ordering</li>
+                                    <li>Assign employees to projects</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title"><i class="fas fa-user-shield me-2"></i>Admin User Management</h5>
+                                <p>Managing admin access:</p>
+                                <ul>
+                                    <li>Add new admin users</li>
+                                    <li>Remove admin privileges</li>
+                                    <li>View all admin users</li>
+                                    <li>Manage admin permissions</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close Guide</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Show the modal when the page loads if it was triggered
+    if (window.location.hash === '#show-guide') {
+        var modal = new bootstrap.Modal(document.getElementById('userGuideModal'));
+        modal.show();
+    }
+});
+</script> 

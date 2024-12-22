@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Add Employee{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                <h1 class="display-6 fw-bold text-primary mb-0">Add Employee</h1>
+                <p class="text-muted mt-2">Add a new team member to the skills matrix</p>
+            </div>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-2"></i>Back
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="name" name="name" required>
+                                <label for="name">Full Name</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="email" class="form-control" id="email" name="email" required>
+                                <label for="email">Email Address</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="clock_id" name="clock_id">
+                                <label for="clock_id">Clock ID</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="job_title" name="job_title" required>
+                                <label for="job_title">Job Title</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <select class="form-select" id="level" name="level_id" required>
+                                    <option value="">Select Level</option>
+                                    {% for level in levels %}
+                                        <option value="{{ level.id }}">{{ level.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <label for="level">Level</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <select class="form-select" id="project_id" name="project_id">
+                                    <option value="">Select Project</option>
+                                    {% for project in projects %}
+                                        <option value="{{ project.id }}">{{ project.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <label for="project_id">Current Project</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="date" class="form-control" id="start_date" name="start_date" required>
+                                <label for="start_date">Start Date</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <hr class="my-4">
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-user-plus me-2"></i>Add Employee
+                                </button>
+                                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Cancel</a>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-floating > label {
+    padding-left: 1.25rem;
+}
+.form-floating > .form-control,
+.form-floating > .form-select {
+    height: calc(3.5rem + 2px);
+    line-height: 1.25;
+}
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label,
+.form-floating > .form-select ~ label {
+    transform: scale(.85) translateY(-1rem) translateX(.15rem);
+}
+</style>
+{% endblock %} 
