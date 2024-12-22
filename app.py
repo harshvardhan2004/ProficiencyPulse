@@ -752,6 +752,41 @@ def user_guide():
     """Display the user guide modal."""
     return redirect(url_for('index', _anchor='show-guide'))
 
+@app.cli.command("init-data")
+def init_data_command():
+    """Initialize basic data required for the system (levels, etc.)"""
+    try:
+        # Check if we already have levels
+        if Level.query.count() == 0:
+            # Create default levels
+            levels = [
+                Level(name="Junior", order=1),
+                Level(name="Mid-Level", order=2),
+                Level(name="Senior", order=3),
+                Level(name="Lead", order=4),
+                Level(name="Principal", order=5)
+            ]
+            db.session.add_all(levels)
+            click.echo('Created default levels')
+        else:
+            click.echo('Levels already exist, skipping...')
+
+        # Check if we already have a default project
+        if Project.query.count() == 0:
+            # Create a default project
+            default_project = Project(name="Unassigned")
+            db.session.add(default_project)
+            click.echo('Created default project')
+        else:
+            click.echo('Projects already exist, skipping...')
+
+        db.session.commit()
+        click.echo('Basic data initialization completed successfully')
+        
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f'Error initializing data: {str(e)}', err=True)
+
 #------------------------------------------------------------------------------
 # Application Entry Point
 #------------------------------------------------------------------------------

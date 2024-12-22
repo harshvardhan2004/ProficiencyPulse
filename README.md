@@ -106,11 +106,22 @@ DB_NAME=skills_matrix
 PORT=8000
 ```
 
-## Database Setup
+## Database Setup and Initialization
 
 ### Development (SQLite)
+1. Initialize the database tables:
 ```bash
 flask init-db
+```
+
+2. Initialize basic data (levels and default project):
+```bash
+flask init-data
+```
+
+3. Create your first admin user:
+```bash
+flask create-admin "admin@example.com" "Admin Name" "password"
 ```
 
 ### Production (MySQL)
@@ -119,24 +130,17 @@ flask init-db
 CREATE DATABASE skills_matrix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-2. Initialize database:
+2. Initialize database and data:
 ```bash
 FLASK_ENV=production flask init-db
+FLASK_ENV=production flask init-data
+FLASK_ENV=production flask create-admin "admin@example.com" "Admin Name" "password"
 ```
 
-## Creating an Admin User
-
-There are two ways to create admin users:
-
-1. Using the command line (initial setup):
-```bash
-flask create-admin "admin@example.com" "Admin Name" "password"
-```
-
-2. Through the admin panel (requires existing admin access):
-   - Log in as an admin
-   - Navigate to the Admin Panel
-   - Use the "Add Admin" button in the Admin Users section
+Note: The initialization steps must be performed in this order:
+1. `init-db` - Creates the database tables
+2. `init-data` - Creates default levels and projects
+3. `create-admin` - Creates the initial admin user
 
 ## Running the Application
 
