@@ -437,26 +437,49 @@ def admin():
     levels = Level.query.order_by(Level.order).all()
     admins = Employee.query.filter_by(is_admin=True).order_by(Employee.name).all()
     
-    # Get search query and page number
-    search_query = request.args.get('skill_search', '').strip()
-    page = request.args.get('page', 1, type=int)
+    # Get search queries and page numbers
+    skill_search = request.args.get('skill_search', '').strip()
+    employee_search = request.args.get('employee_search', '').strip()
+    skill_page = request.args.get('skill_page', 1, type=int)
+    employee_page = request.args.get('employee_page', 1, type=int)
     per_page = 10
     
     # Base query for skills
     skills_query = Skill.query
     
-    # Apply search if query exists
-    if search_query:
+    # Apply skill search if query exists
+    if skill_search:
         skills_query = skills_query.filter(
             or_(
-                Skill.name.ilike(f'%{search_query}%'),
-                Skill.description.ilike(f'%{search_query}%')
+                Skill.name.ilike(f'%{skill_search}%'),
+                Skill.description.ilike(f'%{skill_search}%')
+            )
+        )
+    
+    # Base query for employees
+    employees_query = Employee.query.filter_by(is_admin=False)  # Exclude admin users
+    
+    # Apply employee search if query exists
+    if employee_search:
+        employees_query = employees_query.join(Project, Employee.project_id == Project.id, isouter=True).filter(
+            or_(
+                Employee.name.ilike(f'%{employee_search}%'),
+                Employee.email.ilike(f'%{employee_search}%'),
+                Employee.job_title.ilike(f'%{employee_search}%'),
+                Employee.clock_id.ilike(f'%{employee_search}%'),
+                Project.name.ilike(f'%{employee_search}%')
             )
         )
     
     # Order and paginate
     skills_paginated = skills_query.order_by(Skill.name).paginate(
-        page=page, 
+        page=skill_page, 
+        per_page=per_page,
+        error_out=False
+    )
+    
+    employees_paginated = employees_query.order_by(Employee.name).paginate(
+        page=employee_page,
         per_page=per_page,
         error_out=False
     )
@@ -465,9 +488,11 @@ def admin():
                          projects=projects,
                          levels=levels,
                          skills=skills_paginated,
+                         employees=employees_paginated,
                          admins=admins,
                          current_employee_id=session.get('employee_id'),
-                         skill_search=search_query)
+                         skill_search=skill_search,
+                         employee_search=employee_search)
 
 @app.route('/admin/project/add', methods=['POST'])
 @admin_required
@@ -786,6 +811,30 @@ def init_data_command():
     except Exception as e:
         db.session.rollback()
         click.echo(f'Error initializing data: {str(e)}', err=True)
+
+@app.route('/admin/employee/delete/<int:employee_id>', methods=['POST'])
+@admin_required
+def admin_delete_employee(employee_id):
+    """Delete an employee and their associated skills."""
+    try:
+        employee = Employee.query.get_or_404(employee_id)
+        
+        # Don't allow deleting admin users through this route
+        if employee.is_admin:
+            flash('Cannot delete admin users through this interface.', 'error')
+            return redirect(url_for('admin'))
+        
+        # Delete associated skills first
+        EmployeeSkill.query.filter_by(employee_id=employee_id).delete()
+        
+        # Delete the employee
+        db.session.delete(employee)
+        db.session.commit()
+        flash('Employee deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting employee: {str(e)}', 'error')
+    return redirect(url_for('admin'))
 
 #------------------------------------------------------------------------------
 # Application Entry Point
