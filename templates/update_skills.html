@@ -75,6 +75,18 @@
                                         {% endif %}
                                     </div>
                                 {% endif %}
+
+                                <div class="col-12 mt-3">
+                                    <div class="form-floating">
+                                        <textarea class="form-control" 
+                                                  id="notes_{{ skill.id }}" 
+                                                  name="notes_{{ skill.id }}" 
+                                                  style="height: 100px"
+                                                  placeholder="Add your notes about this skill">{{ employee_skill.notes if employee_skill else '' }}</textarea>
+                                        <label for="notes_{{ skill.id }}">Notes</label>
+                                        <div class="form-text">Add any personal notes or comments about your experience with this skill</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     {% endfor %}

@@ -105,6 +105,7 @@ class EmployeeSkill(db.Model):
     proficiency_level = db.Column(db.Integer, nullable=False)  # 1-5 scale
     last_training_date = db.Column(db.Date)  # Date of last training completion
     training_expiry_date = db.Column(db.Date)  # Calculated expiry date
+    notes = db.Column(db.Text)  # Personal notes/comments about the skill
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 #------------------------------------------------------------------------------
@@ -397,12 +398,17 @@ def update_employee_skills(employee_id):
                     training_date_key = f'training_date_{skill_id}'
                     training_date = request.form.get(training_date_key)
                     
+                    # Get notes if provided
+                    notes_key = f'notes_{skill_id}'
+                    notes = request.form.get(notes_key, '').strip()
+                    
                     skill = Skill.query.get(skill_id)
                     employee_skill = EmployeeSkill(
                         employee_id=employee_id,
                         skill_id=skill_id,
                         proficiency_level=level,
-                        last_training_date=datetime.strptime(training_date, '%Y-%m-%d').date() if training_date else None
+                        last_training_date=datetime.strptime(training_date, '%Y-%m-%d').date() if training_date else None,
+                        notes=notes if notes else None
                     )
                     
                     # Calculate expiry date if applicable
@@ -785,11 +791,13 @@ def init_data_command():
         if Level.query.count() == 0:
             # Create default levels
             levels = [
-                Level(name="Junior", order=1),
-                Level(name="Mid-Level", order=2),
-                Level(name="Senior", order=3),
-                Level(name="Lead", order=4),
-                Level(name="Principal", order=5)
+                Level(name="Placement", order=1),
+                Level(name="Apprentice", order=2),
+                Level(name="Graduate", order=3),
+                Level(name="Senior Engineer", order=4),
+                Level(name="Principal Engineer", order=5),
+                Level(name="Senior Principal Engineer", order=6),
+                Level(name="Chief", order=7),
             ]
             db.session.add_all(levels)
             click.echo('Created default levels')
