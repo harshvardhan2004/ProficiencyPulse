@@ -7,7 +7,7 @@
 from datetime import datetime
 
 # Third-party imports
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, after_this_request
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import inspect, or_
 from sqlalchemy.orm import joinedload
@@ -843,6 +843,164 @@ def admin_delete_employee(employee_id):
         db.session.rollback()
         flash(f'Error deleting employee: {str(e)}', 'error')
     return redirect(url_for('admin'))
+
+@app.route('/admin/database/backup')
+@admin_required
+def backup_database():
+    """Create a backup of the database in SQLite format."""
+    try:
+        # Create a temporary SQLite database
+        backup_db_path = 'backup_skills_matrix.db'
+        backup_uri = f'sqlite:///{backup_db_path}'
+        
+        # Create engine for backup database
+        backup_engine = db.create_engine(backup_uri)
+        
+        # Create all tables in the backup database
+        db.Model.metadata.create_all(backup_engine)
+        
+        # Create a new session for the backup database
+        from sqlalchemy.orm import sessionmaker
+        BackupSession = sessionmaker(bind=backup_engine)
+        backup_session = BackupSession()
+        
+        # Get all models from the current database
+        models = [Level, Project, Employee, Skill, EmployeeSkill]
+        
+        # Copy data from each model
+        for model in models:
+            # Get all records from the current database
+            records = model.query.all()
+            
+            # Insert records into backup database
+            for record in records:
+                # Create a new instance without SQLAlchemy's instrumentation
+                backup_record = model()
+                for column in model.__table__.columns:
+                    setattr(backup_record, column.name, getattr(record, column.name))
+                backup_session.add(backup_record)
+        
+        # Commit the backup
+        backup_session.commit()
+        backup_session.close()
+        
+        # Send the file
+        from flask import send_file
+        import os
+        from datetime import datetime
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        download_name = f'skills_matrix_backup_{timestamp}.db'
+        
+        return_data = send_file(
+            backup_db_path,
+            mimetype='application/x-sqlite3',
+            as_attachment=True,
+            download_name=download_name
+        )
+        
+        # Clean up the temporary file after sending
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(backup_db_path)
+            except Exception as e:
+                app.logger.error(f"Error removing temporary backup file: {e}")
+            return response
+            
+        return return_data
+        
+    except Exception as e:
+        flash(f'Error creating backup: {str(e)}', 'error')
+        return redirect(url_for('admin'))
+
+@app.route('/admin/database/restore', methods=['POST'])
+@admin_required
+def restore_database():
+    """Restore the database from a SQLite backup file."""
+    try:
+        if 'backup_file' not in request.files:
+            flash('No backup file provided', 'error')
+            return redirect(url_for('admin'))
+        
+        file = request.files['backup_file']
+        if file.filename == '':
+            flash('No backup file selected', 'error')
+            return redirect(url_for('admin'))
+        
+        if not file.filename.endswith('.db'):
+            flash('Invalid file type. Please upload a .db file', 'error')
+            return redirect(url_for('admin'))
+        
+        # Save the uploaded file temporarily
+        import tempfile
+        import os
+        
+        temp_dir = tempfile.mkdtemp()
+        backup_path = os.path.join(temp_dir, 'temp_backup.db')
+        file.save(backup_path)
+        
+        try:
+            # Create engine for the backup database
+            backup_uri = f'sqlite:///{backup_path}'
+            backup_engine = db.create_engine(backup_uri)
+            
+            # Verify this is a valid backup by checking for required tables
+            from sqlalchemy import inspect
+            inspector = inspect(backup_engine)
+            required_tables = {'employee', 'level', 'project', 'skill', 'employee_skill'}
+            existing_tables = set(inspector.get_table_names())
+            
+            if not required_tables.issubset(existing_tables):
+                raise ValueError('Invalid backup file: Missing required tables')
+            
+            # Create a session for the backup database
+            from sqlalchemy.orm import sessionmaker
+            BackupSession = sessionmaker(bind=backup_engine)
+            backup_session = BackupSession()
+            
+            # Clear existing data
+            EmployeeSkill.query.delete()
+            Employee.query.delete()
+            Skill.query.delete()
+            Project.query.delete()
+            Level.query.delete()
+            
+            # Models in order of restoration (respecting foreign key constraints)
+            models = [Level, Project, Employee, Skill, EmployeeSkill]
+            
+            # Restore data from backup
+            for model in models:
+                # Get records from backup
+                backup_records = backup_session.query(model).all()
+                
+                # Insert into current database
+                for record in backup_records:
+                    new_record = model()
+                    for column in model.__table__.columns:
+                        setattr(new_record, column.name, getattr(record, column.name))
+                    db.session.add(new_record)
+            
+            db.session.commit()
+            backup_session.close()
+            flash('Database restored successfully!', 'success')
+            
+        finally:
+            # Clean up temporary files
+            import shutil
+            shutil.rmtree(temp_dir)
+        
+        return redirect(url_for('admin'))
+        
+    except ValueError as e:
+        db.session.rollback()
+        flash(str(e), 'error')
+        return redirect(url_for('admin'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error restoring database: {str(e)}', 'error')
+        return redirect(url_for('admin'))
 
 #------------------------------------------------------------------------------
 # Application Entry Point
