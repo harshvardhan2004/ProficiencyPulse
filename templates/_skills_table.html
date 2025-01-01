@@ -1,0 +1,99 @@
+<div class="table-responsive">
+    <table class="table table-hover mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Skill Name</th>
+                <th>Description</th>
+                <th>Training Required</th>
+                <th>Training Validity</th>
+                <th class="text-end">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for skill in skills.items %}
+                <tr>
+                    <td>{{ skill.name }}</td>
+                    <td>{{ skill.description or '-' }}</td>
+                    <td>
+                        {% if skill.requires_training %}
+                            <span class="badge bg-info">
+                                <i class="fas fa-check me-1"></i>Yes
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if skill.training_expiry_months %}
+                            {{ skill.training_expiry_months }} months
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <button type="button" 
+                                class="btn btn-primary btn-sm"
+                                onclick="editSkill({{ skill.id }}, '{{ skill.name }}', '{{ skill.description or '' }}', {{ 'true' if skill.requires_training else 'false' }}, {{ skill.training_expiry_months or 0 }}, '{{ skill.training_details or '' }}')"
+                                data-bs-toggle="modal" 
+                                data-bs-target="#editSkillModal">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <form action="{{ url_for('admin_delete_skill', skill_id=skill.id) }}" 
+                              method="POST" 
+                              class="d-inline"
+                              onsubmit="return confirm('Are you sure you want to delete this skill?');">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-4">
+                        {% if skill_search %}
+                            No skills found matching your search
+                        {% else %}
+                            No skills added yet
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if skills.pages > 1 %}
+    <div class="card-footer bg-white">
+        <nav aria-label="Skill pages">
+            <ul class="pagination justify-content-center mb-0">
+                <!-- Previous page -->
+                <li class="page-item {{ 'disabled' if not skills.has_prev }}">
+                    <a class="page-link" 
+                       href="{{ url_for('admin', skill_page=skills.prev_num, skill_search=skill_search) if skills.has_prev else '#' }}">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+                
+                <!-- Page numbers -->
+                {% for page_num in range(1, skills.pages + 1) %}
+                    <li class="page-item {{ 'active' if page_num == skills.page }}">
+                        <a class="page-link" 
+                           href="{{ url_for('admin', skill_page=page_num, skill_search=skill_search) }}">
+                            {{ page_num }}
+                        </a>
+                    </li>
+                {% endfor %}
+                
+                <!-- Next page -->
+                <li class="page-item {{ 'disabled' if not skills.has_next }}">
+                    <a class="page-link" 
+                       href="{{ url_for('admin', skill_page=skills.next_num, skill_search=skill_search) if skills.has_next else '#' }}">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+{% endif %} 

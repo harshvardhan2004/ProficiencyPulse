@@ -1,0 +1,39 @@
+<div class="table-responsive">
+    <table class="table table-hover mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Job Title</th>
+                <th class="text-end">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for admin in admins %}
+                <tr>
+                    <td>{{ admin.name }}</td>
+                    <td>{{ admin.email }}</td>
+                    <td>{{ admin.job_title }}</td>
+                    <td class="text-end">
+                        {% if admin.id != current_employee_id %}
+                            <form action="{{ url_for('admin_remove_admin', employee_id=admin.id) }}" 
+                                  method="POST" 
+                                  class="d-inline"
+                                  onsubmit="return confirm('Are you sure you want to remove admin privileges from this user?');">
+                                <button type="submit" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-user-minus"></i>
+                                </button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-4">
+                        No admin users found
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div> 

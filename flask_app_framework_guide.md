@@ -1,280 +1,236 @@
-# Flask Web Application Development Framework Guide
+# Flask Skills Matrix Application Framework Guide
 
-## Application Overview
-This guide outlines the framework used to build a modern Flask web application with role-based authentication, database management, and a responsive UI.
+## Overview
+This guide outlines the framework used to build a comprehensive skills matrix web application using Flask. The application features role-based authentication, employee skills management, and a responsive UI with Bootstrap 5.
 
-### Core Technologies
-- Backend: Flask 3.0.0 with Python 3.x
-- Database: SQLAlchemy 2.0.23 with Flask-SQLAlchemy 3.1.1
-- Authentication: Flask session-based with role management
-- Forms: Flask-WTF 1.2.1 for CSRF protection
-- Frontend: Bootstrap 5 with Font Awesome icons
-- Production Server: Waitress 2.1.2
-- Database Drivers: PyMySQL 1.1.0 with cryptography 41.0.7
-- Environment: python-dotenv 1.0.0
+## Core Technologies
+- Flask (2.0+)
+- SQLAlchemy (1.4+)
+- Bootstrap 5
+- Waitress (Production Server)
+- MySQL (Production) / SQLite (Development)
+- Font Awesome 5 (Icons)
 
-### Project Structure
+## Project Structure
 ```
-skills-matrix/
-├── app.py              # Main application with routes and models
-├── config.py           # Environment-specific configurations
-├── database.py         # Database initialization and management
-├── wsgi.py            # WSGI entry point for development/production
-├── requirements.txt    # Python dependencies
-├── .env               # Environment variables (not in version control)
-├── .env.example       # Environment template
-└── templates/         # Jinja2 HTML templates
-    ├── base.html      # Base template with navigation and styling
-    ├── index.html     # Main dashboard/matrix view
-    ├── login.html     # Authentication page
-    ├── admin.html     # Admin dashboard
-    └── components/    # Reusable template components
+skills_matrix/
+├── app.py                 # Main application file
+├── config.py             # Configuration management
+├── database.py           # Database initialization and management
+├── wsgi.py              # WSGI entry point
+├── requirements.txt      # Python dependencies
+├── .env                 # Environment variables
+├── static/              # Static assets (CSS, JS, images)
+└── templates/           # Jinja2 HTML templates
+    ├── base.html        # Base template with common layout
+    ├── index.html       # Skills matrix main view
+    ├── admin.html       # Admin panel with tabbed interface
+    ├── login.html       # Authentication page
+    ├── _admin_users_table.html    # Admin users partial
+    ├── _employee_table.html       # Employees partial
+    ├── _skills_table.html         # Skills partial
+    ├── _projects_table.html       # Projects partial
+    ├── _levels_table.html         # Levels partial
+    └── _admin_modals.html         # Admin modals partial
 ```
 
-### Key Components
+## Key Features
 
-1. Configuration Management (config.py):
+### Authentication System
+- Role-based authentication (Admin/Employee)
+- Secure password hashing with Werkzeug
+- "Remember Me" functionality
+- Session management
+- Protected routes with decorators
+
+### Admin Panel
+The admin panel is organized into four main sections:
+
+1. Employee Management
+   - Admin user management
+   - Employee CRUD operations
+   - Searchable employee list with pagination
+   - Employee skill reports
+
+2. Skills Management
+   - Skill CRUD operations
+   - Training requirements tracking
+   - Searchable skills list with pagination
+   - Training validity periods
+
+3. Options Management
+   - Project management
+   - Employee level management
+   - Hierarchical organization structure
+
+4. Tools
+   - Database backup/restore functionality
+   - System maintenance tools
+
+### Database Management
+- Automatic database initialization
+- Migration support
+- Backup and restore functionality
+- Data preservation during updates
+
+## Implementation Details
+
+### Configuration Management
 ```python
 class Config:
-    SECRET_KEY = environ.get('SECRET_KEY', 'dev-key')
-    SQLALCHEMY_DATABASE_URI = environ.get('DATABASE_URL', 'sqlite:///app.db')
-    PERMANENT_SESSION_LIFETIME = timedelta(days=31)
-    SESSION_COOKIE_SECURE = environ.get('FLASK_ENV') == 'production'
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
-
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    REMEMBER_COOKIE_DURATION = timedelta(days=30)
+    
 class DevelopmentConfig(Config):
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///skills.db'
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///skills_matrix.db'
 
 class ProductionConfig(Config):
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
     DEBUG = False
-    DB_USER = os.getenv('DB_USER', 'root')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', '')
-    DB_HOST = os.getenv('DB_HOST', 'localhost')
-    DB_NAME = os.getenv('DB_NAME', 'skills_matrix')
-    SQLALCHEMY_DATABASE_URI = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 ```
 
-2. Database Setup (database.py):
-```python
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import inspect
-
-db = SQLAlchemy()
-
-def init_db(app):
-    """Initialize the database with the app"""
-    db.init_app(app)
-    
-    with app.app_context():
-        engine = db.get_engine()
-        inspector = inspect(engine)
-        existing_tables = inspector.get_table_names()
-        
-        # Create only missing tables
-        db.Model.metadata.create_all(
-            bind=engine,
-            tables=[table for table in db.Model.metadata.tables.values()
-                   if table.name not in existing_tables]
-        )
-```
-
-3. WSGI Entry Point (wsgi.py):
-```python
-from dotenv import load_dotenv
-from app import app
-import os
-
-load_dotenv()
-
-if __name__ == "__main__":
-    env = os.getenv('FLASK_ENV', 'production')
-    host = os.getenv('FLASK_HOST', '127.0.0.1')
-    port = int(os.getenv('FLASK_PORT', 5000))
-    
-    if env == 'development':
-        app.run(host=host, port=port, debug=True)
-    else:
-        from waitress import serve
-        serve(
-            app,
-            host=host,
-            port=port,
-            threads=int(os.getenv('WAITRESS_THREADS', 4)),
-            connection_limit=int(os.getenv('WAITRESS_CONNECTION_LIMIT', 1000)),
-            channel_timeout=int(os.getenv('WAITRESS_CHANNEL_TIMEOUT', 30))
-        )
-```
-
-4. Authentication System:
-```python
-# Decorators for route protection
-def admin_required(f):
-    def decorated_function(*args, **kwargs):
-        if not session.get('is_admin', False):
-            flash('Access denied. Administrator privileges required.', 'error')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    decorated_function.__name__ = f.__name__
-    return decorated_function
-
-def login_required(f):
-    def decorated_function(*args, **kwargs):
-        if 'employee_id' not in session:
-            flash('Please log in first.', 'error')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    decorated_function.__name__ = f.__name__
-    return decorated_function
-```
-
-### Development Best Practices
-
-1. Environment Configuration:
-```ini
-# .env.example
-FLASK_ENV=development
-FLASK_HOST=127.0.0.1
-FLASK_PORT=5000
-SECRET_KEY=your-secure-secret-key-here
-
-# Database Configuration
-DB_USER=your_mysql_user
-DB_PASSWORD=your_mysql_password
-DB_HOST=localhost
-DB_NAME=skills_matrix
-
-# Production Settings
-WAITRESS_THREADS=4
-WAITRESS_CONNECTION_LIMIT=1000
-WAITRESS_CHANNEL_TIMEOUT=30
-```
-
-2. Database Models:
+### Database Models
 ```python
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256))
+    password_hash = db.Column(db.String(200))
     is_admin = db.Column(db.Boolean, default=False)
-    
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+    clock_id = db.Column(db.String(20))
+    job_title = db.Column(db.String(100))
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'))
+    level_id = db.Column(db.Integer, db.ForeignKey('level.id'))
+    skills = db.relationship('EmployeeSkill', backref='employee', lazy=True)
 
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+class Skill(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    requires_training = db.Column(db.Boolean, default=False)
+    training_expiry_months = db.Column(db.Integer)
+    training_details = db.Column(db.Text)
+
+class EmployeeSkill(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'))
+    skill_id = db.Column(db.Integer, db.ForeignKey('skill.id'))
+    level = db.Column(db.Integer)
+    notes = db.Column(db.Text)
+    training_date = db.Column(db.DateTime)
 ```
 
-3. CLI Commands:
+### Authentication Decorators
 ```python
-@app.cli.command("init-db")
-def init_db_command():
-    """Initialize the database and create missing tables."""
-    try:
-        db.create_all()
-        click.echo('Database initialized successfully.')
-    except Exception as e:
-        click.echo(f'Error initializing database: {str(e)}', err=True)
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'employee_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
-@app.cli.command("create-admin")
-@click.argument('email')
-@click.argument('name')
-@click.argument('password')
-def create_admin_command(email, name, password):
-    """Create an administrator user."""
-    try:
-        admin = Employee(
-            email=email,
-            name=name,
-            is_admin=True
-        )
-        admin.set_password(password)
-        db.session.add(admin)
-        db.session.commit()
-        click.echo('Admin user created successfully.')
-    except Exception as e:
-        db.session.rollback()
-        click.echo(f'Error creating admin: {str(e)}', err=True)
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'employee_id' not in session:
+            return redirect(url_for('login'))
+        employee = Employee.query.get(session['employee_id'])
+        if not employee or not employee.is_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 ```
 
-### Security Features
+## Development Best Practices
 
-1. Session Management:
-- 31-day session lifetime with "Remember Me"
-- Secure cookie settings
-- CSRF protection
-- HTTP-only cookies
-- SameSite cookie policy
+### Environment Management
+- Use `.env` files for configuration
+- Separate development and production settings
+- Secure credential management
 
-2. Password Security:
-- Werkzeug password hashing
-- No plain-text password storage
-- Secure password reset flow
+### Database Interactions
+- Use SQLAlchemy ORM for database operations
+- Implement proper transaction management
+- Handle foreign key constraints
 
-3. Access Control:
-- Role-based authentication
-- Protected admin routes
-- Session validation
-- Input sanitization
+### Security Measures
+- CSRF protection on forms
+- Secure password handling
+- Role-based access control
+- Session security
 
-### Deployment Steps
+### Frontend Development
+- Responsive design with Bootstrap 5
+- Progressive enhancement
+- Client-side validation
+- AJAX for dynamic updates
 
-1. Server Setup:
+### Code Organization
+- Modular template structure
+- Separation of concerns
+- Clear naming conventions
+- Comprehensive commenting
+
+## Deployment
+
+### Server Setup
+1. Install required packages
+2. Configure environment variables
+3. Initialize database
+4. Set up Waitress server
+
+### Environment Variables
+```
+FLASK_APP=wsgi.py
+FLASK_ENV=production
+SECRET_KEY=your-secret-key
+DATABASE_URL=mysql://user:pass@localhost/skills
+PORT=8080
+```
+
+### Database Initialization
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Initialize database
+# Initialize database tables
 flask init-db
 
 # Create initial data
 flask init-data
 
-# Create admin user
+# Create first admin user
 flask create-admin "admin@example.com" "Admin Name" "password"
 ```
 
-2. Production Configuration:
-```ini
-FLASK_ENV=production
-SECRET_KEY=your-secure-key
-DB_USER=production_user
-DB_PASSWORD=secure_password
-DB_HOST=database_host
-DB_NAME=skills_matrix
+### Running the Application
+Development:
+```bash
+flask run
 ```
 
-3. Running in Production:
+Production:
 ```bash
 python wsgi.py
 ```
 
-### Error Handling
+## Error Handling
+- Custom error pages (404, 403, 500)
+- Graceful error handling
+- User-friendly error messages
+- Logging system
 
-1. Database Errors:
-```python
-try:
-    db.session.commit()
-    flash('Operation successful!', 'success')
-except Exception as e:
-    db.session.rollback()
-    flash(f'Error: {str(e)}', 'error')
-```
+## Maintenance
+- Regular database backups
+- System monitoring
+- Performance optimization
+- Security updates
 
-2. Form Validation:
-```python
-if not name or not email:
-    flash('All fields are required.', 'error')
-    return redirect(url_for('add_employee'))
-```
-
-3. Authentication Errors:
-```python
-if not employee or not employee.check_password(password):
-    flash('Invalid credentials.', 'error')
-    return redirect(url_for('login'))
-```
-
-This framework provides a robust foundation for building secure, scalable Flask applications with modern features and best practices. The modular structure allows for easy maintenance and future enhancements. 
+## Future Enhancements
+- API integration
+- Advanced reporting
+- Bulk data operations
+- Enhanced search capabilities
+- Training management system
+- Email notifications
+- Automated skill assessments 

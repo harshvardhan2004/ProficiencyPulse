@@ -1,0 +1,35 @@
+<div class="table-responsive">
+    <table class="table table-hover mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Order</th>
+                <th>Level Name</th>
+                <th class="text-end">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for level in levels %}
+                <tr>
+                    <td>{{ level.order }}</td>
+                    <td>{{ level.name }}</td>
+                    <td class="text-end">
+                        <form action="{{ url_for('admin_delete_level', level_id=level.id) }}" 
+                              method="POST" 
+                              class="d-inline"
+                              onsubmit="return confirm('Are you sure you want to delete this level?');">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-4">
+                        No levels added yet
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div> 

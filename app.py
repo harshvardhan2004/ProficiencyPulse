@@ -490,6 +490,30 @@ def admin():
         error_out=False
     )
     
+    # Render table templates
+    admin_users_table = render_template('_admin_users_table.html', 
+                                      admins=admins,
+                                      current_employee_id=session.get('employee_id'))
+    
+    employee_table = render_template('_employee_table.html',
+                                   employees=employees_paginated,
+                                   employee_search=employee_search)
+    
+    skills_table = render_template('_skills_table.html',
+                                 skills=skills_paginated,
+                                 skill_search=skill_search)
+    
+    projects_table = render_template('_projects_table.html',
+                                   projects=projects)
+    
+    levels_table = render_template('_levels_table.html',
+                                 levels=levels)
+    
+    # Render all modals
+    modals = render_template('_admin_modals.html',
+                           projects=projects,
+                           levels=levels)
+    
     return render_template('admin.html',
                          projects=projects,
                          levels=levels,
@@ -498,7 +522,13 @@ def admin():
                          admins=admins,
                          current_employee_id=session.get('employee_id'),
                          skill_search=skill_search,
-                         employee_search=employee_search)
+                         employee_search=employee_search,
+                         admin_users_table=admin_users_table,
+                         employee_table=employee_table,
+                         skills_table=skills_table,
+                         projects_table=projects_table,
+                         levels_table=levels_table,
+                         modals=modals)
 
 @app.route('/admin/project/add', methods=['POST'])
 @admin_required
