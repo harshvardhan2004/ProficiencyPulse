@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <!-- Link to your CSS framework or custom styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block title %}User Profile{% endblock %}
+    {% block content %}
+    <div class="container mt-5">
+        <h1>User Profile</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('profile') }}">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                {{ form.username(class="form-control", readonly=True) }}
+            </div>
+            <div class="mb-3">
+                <label for="job_title" class="form-label">Job Title</label>
+                {{ form.job_title(class="form-control", readonly=True) }}
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-4">
+                  <label for="level_name" class="form-label">Level</label>
+                  {{ form.level_name(class="form-control", readonly=True) }}
+              </div>
+              <div class="col-md-4">
+                  <label for="project_name" class="form-label">Project</label>
+                  {{ form.project_name(class="form-control", readonly=True) }}
+              </div>
+              <div class="col-md-4">
+                  <label for="start_date_str" class="form-label">Start Date</label>
+                  {{ form.start_date_str(class="form-control", readonly=True) }}
+              </div>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                {{ form.email(class="form-control") }}
+                {% if form.email.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.email.errors[0] }}
+                    </div>
+                {% endif %}
+            </div>
+             <div class="mb-3">
+                 <label for="phone_number" class="form-label">Phone Number</label>
+                 {{ form.phone_number(class="form-control") }}
+                 {% if form.phone_number.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.phone_number.errors[0] }}
+                    </div>
+                 {% endif %}
+             </div>
+             <div class="mb-3">
+                 <label for="linkedin_url" class="form-label">LinkedIn Profile URL</label>
+                 {{ form.linkedin_url(class="form-control", placeholder="https://www.linkedin.com/in/...") }}
+                 {% if form.linkedin_url.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.linkedin_url.errors[0] }}
+                    </div>
+                 {% endif %}
+             </div>
+             <div class="mb-3">
+                <label for="about_me" class="form-label">About Me</label>
+                {{ form.about_me(class="form-control", rows=4) }}
+                 {% if form.about_me.errors %}
+                    <div class="invalid-feedback d-block">
+                        {{ form.about_me.errors[0] }}
+                    </div>
+                {% endif %}
+            </div>
+            <!-- Add other profile fields as needed -->
+            <button type="submit" class="btn btn-primary">Update Profile</button>
+        </form>
+    </div>
+    {% endblock %}
+</body>
+</html> 

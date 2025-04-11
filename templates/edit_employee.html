@@ -76,6 +76,19 @@
                                 <label for="start_date">Start Date</label>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                           <div class="form-floating">
+                                <input type="date" class="form-control" id="new_role_start_date" name="new_role_start_date" 
+                                       value="{{ today_date_str }}">
+                                <label for="new_role_start_date">Start Date for New Role (if changing)</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-floating">
+                                <textarea class="form-control" id="change_notes" name="change_notes" rows="3"></textarea>
+                                <label for="change_notes">Notes for Change (optional, saved if job title, level, or project changes)</label>
+                            </div>
+                        </div>
                         <div class="col-12">
                             <hr class="my-4">
                             <div class="d-grid gap-2">

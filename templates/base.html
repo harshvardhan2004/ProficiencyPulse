@@ -186,6 +186,11 @@
                 <ul class="navbar-nav ms-auto">
                     {% if session.get('employee_id') %}
                         <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('profile') }}">
+                                <i class="fas fa-user me-2"></i>Profile
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="mailto:FTN.ISVDashboard@mbda.co.uk?subject=Skills%20Matrix%20Help">
                                 <i class="fas fa-question-circle me-2"></i>Get Help
                             </a>
@@ -197,7 +202,7 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('logout') }}">
-                                <i class="fas fa-sign-out-alt me-2"></i>Logout
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout ({{ session.get('user_name', 'User') }})
                             </a>
                         </li>
                     {% endif %}

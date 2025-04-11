@@ -150,6 +150,48 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Employee History Section -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Job History</h5>
+                </div>
+                <div class="card-body">
+                    {% if history %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th>Job Title</th>
+                                        <th>Level</th>
+                                        <th>Project</th>
+                                        <th>Reason</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in history %}
+                                        <tr>
+                                            <td>{{ entry.start_date.strftime('%Y-%m-%d') }}</td>
+                                            <td>{{ entry.end_date.strftime('%Y-%m-%d') if entry.end_date else 'Current' }}</td>
+                                            <td>{{ entry.job_title }}</td>
+                                            <td>{{ entry.level_rel.name if entry.level_rel else 'N/A' }}</td>
+                                            <td>{{ entry.project_rel.name if entry.project_rel else 'N/A' }}</td>
+                                            <td>{{ entry.change_reason if entry.change_reason else '-' }}</td>
+                                            <td>{{ entry.notes if entry.notes else '-' }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No history recorded yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+
         </div>
     </div>
 </div>

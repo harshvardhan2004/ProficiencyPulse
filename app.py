@@ -7,11 +7,17 @@
 from datetime import datetime, timedelta
 
 # Third-party imports
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, after_this_request
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, after_this_request, Response
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import inspect, or_
+from sqlalchemy import inspect, or_, desc
 from sqlalchemy.orm import joinedload
 import click
+import io
+import csv
+from flask_wtf import FlaskForm
+from wtforms import StringField, TextAreaField, EmailField, SubmitField, PasswordField
+from wtforms.validators import DataRequired, Length, Email, EqualTo, Optional, URL
+from flask_migrate import Migrate
 
 # Local application imports
 from config import config
@@ -21,6 +27,7 @@ from database import db, init_db
 app = Flask(__name__)
 app.config.from_object(config)
 init_db(app)
+migrate = Migrate(app, db)
 
 #------------------------------------------------------------------------------
 # Database Models
@@ -57,6 +64,9 @@ class Employee(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     clock_id = db.Column(db.String(50), unique=True)
+    about_me = db.Column(db.Text, nullable=True) # Added field for profile description
+    phone_number = db.Column(db.String(20), nullable=True) # Added phone number field
+    linkedin_url = db.Column(db.String(255), nullable=True) # Added LinkedIn URL field
     
     # Authentication and Authorization
     password_hash = db.Column(db.String(256))  # Only for admin users
@@ -71,6 +81,7 @@ class Employee(db.Model):
     
     # Relationships
     skills = db.relationship('EmployeeSkill', backref='employee', lazy=True)
+    history_entries = db.relationship('EmployeeHistory', backref='employee_rel', lazy=True)
 
     def set_password(self, password):
         """Hash and set the user's password (admin only)"""
@@ -140,6 +151,36 @@ class EmployeeSkill(db.Model):
                 self.training_expiry_date = last_day_of_month
         else:
             self.training_expiry_date = None # Ensure expiry date is None if conditions aren't met
+
+# New model for employee job history
+class EmployeeHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False, index=True)
+    job_title = db.Column(db.String(100), nullable=False)
+    level_id = db.Column(db.Integer, db.ForeignKey('level.id'), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=True, index=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
+    change_reason = db.Column(db.String(255), nullable=True)
+    notes = db.Column(db.Text, nullable=True) # New field for admin notes
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships for easier access in templates if needed (optional here)
+    level_rel = db.relationship('Level', lazy='joined')
+    project_rel = db.relationship('Project', lazy='joined')
+
+class ProfileForm(FlaskForm):
+    """Form for users to edit their profile information."""
+    username = StringField('Username', render_kw={'readonly': True})
+    job_title = StringField('Job Title', render_kw={'readonly': True})
+    level_name = StringField('Level', render_kw={'readonly': True})
+    project_name = StringField('Project', render_kw={'readonly': True})
+    start_date_str = StringField('Start Date', render_kw={'readonly': True})
+    email = EmailField('Email', validators=[DataRequired(), Email()])
+    phone_number = StringField('Phone Number', validators=[Length(min=0, max=20)])
+    linkedin_url = StringField('LinkedIn Profile URL', validators=[Optional(), URL(), Length(max=255)])
+    about_me = TextAreaField('About Me', validators=[Length(min=0, max=500)])
+    submit = SubmitField('Update Profile')
 
 #------------------------------------------------------------------------------
 # CLI Commands for Database Management
@@ -240,6 +281,7 @@ def login():
             # Admin login - requires password verification
             session.permanent = remember  # Make session permanent if remember is checked
             session['employee_id'] = employee.id
+            session['user_name'] = employee.name # Store user name
             session['is_admin'] = True
             flash('Logged in successfully as administrator.', 'success')
             return redirect(url_for('admin'))
@@ -247,6 +289,7 @@ def login():
             # Regular employee login - only requires clock ID
             session.permanent = remember  # Make session permanent if remember is checked
             session['employee_id'] = employee.id
+            session['user_name'] = employee.name # Store user name
             session['is_admin'] = False
             flash('Logged in successfully.', 'success')
             return redirect(url_for('index'))
@@ -284,6 +327,56 @@ def login_required(f):
     return decorated_function
 
 #------------------------------------------------------------------------------
+# Helper Functions
+#------------------------------------------------------------------------------
+
+def _get_filtered_employees_query(search_query, filter_skill_id, filter_min_proficiency):
+    """Builds the base query for employees with optional filtering."""
+    # Start with base query, excluding admins from general lists
+    query = Employee.query.filter(Employee.is_admin == False)
+
+    # Apply search if query exists
+    if search_query:
+        search = f"%{search_query}%"
+        # Use outerjoin for Project to include employees without projects
+        query = query.outerjoin(Project, Employee.project_id == Project.id).filter(
+            db.or_(
+                Employee.name.ilike(search),
+                Employee.job_title.ilike(search),
+                Employee.email.ilike(search),
+                Employee.clock_id.ilike(search), # Added clock_id to search
+                Project.name.ilike(search) # Search by project name
+            )
+        )
+
+    # Apply skill filter if provided
+    if filter_skill_id:
+        # Join with EmployeeSkill
+        query = query.join(EmployeeSkill).filter(
+            EmployeeSkill.skill_id == filter_skill_id
+        )
+        # Apply minimum proficiency if specified
+        if filter_min_proficiency:
+            valid_proficiency = max(1, min(filter_min_proficiency, 5))
+            query = query.filter(EmployeeSkill.proficiency_level >= valid_proficiency)
+        
+        # Group by Employee fields to avoid duplicates if an employee has the skill multiple times (though unlikely with current structure)
+        # Or simply ensure distinct employees if joins cause duplicates
+        # Using distinct() is often simpler than group_by for this purpose if supported by the join strategy
+        query = query.distinct(Employee.id) # Use distinct instead of group_by
+
+    # Eager load relationships AFTER joins and filters but BEFORE ordering/pagination
+    # Load only what's needed for list display or export
+    query = query.options(
+        joinedload(Employee.level_rel),
+        joinedload(Employee.project_rel),
+        # Eager load skills only if needed for display/export logic later
+        # For basic export, we might not need this, improving performance
+        # joinedload(Employee.skills).joinedload(EmployeeSkill.skill) 
+    )
+    return query
+
+#------------------------------------------------------------------------------
 # Main Application Routes
 #------------------------------------------------------------------------------
 
@@ -300,90 +393,56 @@ def index():
     # Get search, filter, and page parameters
     search_query = request.args.get('search', '').strip()
     filter_skill_id = request.args.get('skill_id', type=int)
-    # Default proficiency to 1 if a skill is selected, otherwise None
     default_proficiency = 1 if filter_skill_id else None 
     filter_min_proficiency = request.args.get('min_proficiency', default=default_proficiency, type=int)
     page = request.args.get('page', 1, type=int)
-    per_page = 10 # Or get from config
+    per_page = 10
     
-    # Fetch all skills for the filter dropdown
     all_skills = Skill.query.order_by(Skill.name).all()
     today = datetime.utcnow().date()
 
-    # Base query depending on user type
     if session.get('is_admin', False):
-        query = Employee.query
+        # --- Admin View Logic --- 
+        query = _get_filtered_employees_query(search_query, filter_skill_id, filter_min_proficiency)
+        
+        # Eager load skills data needed for the main table display
+        query = query.options(joinedload(Employee.skills).joinedload(EmployeeSkill.skill))
+
+        pagination = query.order_by(Employee.name).paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        employees_paginated = pagination.items
+        
+        return render_template('index.html', 
+                             employees=employees_paginated,
+                             skills=all_skills,
+                             today=today,
+                             current_employee_id=session.get('employee_id'),
+                             is_admin=True,
+                             search_query=search_query,
+                             filter_skill_id=filter_skill_id,
+                             filter_min_proficiency=filter_min_proficiency,
+                             pagination=pagination)
     else:
-        # Non-admins see only themselves, no pagination needed for a single record
+        # --- Non-Admin View Logic --- 
         employee = Employee.query.options(
             joinedload(Employee.skills).joinedload(EmployeeSkill.skill),
             joinedload(Employee.level_rel),
             joinedload(Employee.project_rel)
         ).filter_by(id=session.get('employee_id')).first_or_404()
         
-        # Render a slightly different context or potentially a different template?
-        # For now, returning a list containing the single employee for template consistency.
         return render_template('index.html', 
-                             employees=[employee], # Pass as a list
+                             employees=[employee],
                              skills=all_skills, 
                              today=today,
                              current_employee_id=session.get('employee_id'),
                              is_admin=False,
-                             search_query=search_query,
-                             filter_skill_id=None, # No filters for single user view
+                             search_query='', # No search/filter for single user
+                             filter_skill_id=None,
                              filter_min_proficiency=None,
-                             pagination=None) # No pagination for single user view
-    
-    # --- Admin View Logic --- 
-    
-    # Apply search if query exists (only for admin view)
-    if search_query:
-        search = f"%{search_query}%"
-        query = query.join(Project, Employee.project_id == Project.id, isouter=True).filter(
-                db.or_(
-                    Employee.name.ilike(search),
-                    Employee.job_title.ilike(search),
-                    Employee.email.ilike(search),
-                    Project.name.ilike(search)
-                )
-            )
-
-    # Apply skill filter if provided (only for admin view)
-    if filter_skill_id:
-        query = query.join(EmployeeSkill).filter(
-            EmployeeSkill.skill_id == filter_skill_id
-        )
-        if filter_min_proficiency:
-            # Ensure proficiency is within a valid range (e.g., 1-5)
-            valid_proficiency = max(1, min(filter_min_proficiency, 5))
-            query = query.filter(EmployeeSkill.proficiency_level >= valid_proficiency)
-
-    # Eager load relationships needed in the template loop
-    # Apply options *after* filtering joins are established
-    query = query.options(
-        joinedload(Employee.skills).joinedload(EmployeeSkill.skill),
-        joinedload(Employee.level_rel),
-        joinedload(Employee.project_rel)
-    )
-
-    # Order and paginate (only for admin view)
-    pagination = query.order_by(Employee.name).paginate(
-        page=page, 
-        per_page=per_page, 
-        error_out=False
-    )
-    employees_paginated = pagination.items
-    
-    return render_template('index.html', 
-                         employees=employees_paginated, # Pass the items for the current page
-                         skills=all_skills, # Pass all skills for header AND filter
-                         today=today,
-                         current_employee_id=session.get('employee_id'),
-                         is_admin=True,
-                         search_query=search_query,
-                         filter_skill_id=filter_skill_id,
-                         filter_min_proficiency=filter_min_proficiency,
-                         pagination=pagination) # Pass the pagination object
+                             pagination=None)
 
 @app.route('/project/add', methods=['POST'])
 def add_project():
@@ -422,6 +481,21 @@ def add_employee():
                     start_date=start_date
                 )
                 db.session.add(employee)
+                # Flush to get the employee.id before creating history
+                db.session.flush()
+                
+                # Create initial history entry
+                initial_history = EmployeeHistory(
+                    employee_id=employee.id,
+                    job_title=employee.job_title,
+                    level_id=employee.level_id,
+                    project_id=employee.project_id,
+                    start_date=employee.start_date,
+                    end_date=None,
+                    change_reason="Initial Hire"
+                )
+                db.session.add(initial_history)
+                
                 db.session.commit()
                 flash('Employee added successfully!', 'success')
                 return redirect(url_for('index'))
@@ -571,17 +645,14 @@ def admin():
     levels = Level.query.order_by(Level.order).all()
     admins = Employee.query.filter_by(is_admin=True).order_by(Employee.name).all()
     
-    # Get search queries and page numbers
     skill_search = request.args.get('skill_search', '').strip()
-    employee_search = request.args.get('employee_search', '').strip()
+    employee_search = request.args.get('employee_search', '').strip() # This is the employee search for the admin employee table
     skill_page = request.args.get('skill_page', 1, type=int)
     employee_page = request.args.get('employee_page', 1, type=int)
     per_page = 10
     
-    # Base query for skills
+    # Skills Query (remains the same)
     skills_query = Skill.query
-    
-    # Apply skill search if query exists
     if skill_search:
         skills_query = skills_query.filter(
             or_(
@@ -589,41 +660,31 @@ def admin():
                 Skill.description.ilike(f'%{skill_search}%')
             )
         )
-    
-    # Base query for employees
-    employees_query = Employee.query.filter_by(is_admin=False)  # Exclude admin users
-    
-    # Apply employee search if query exists
-    if employee_search:
-        employees_query = employees_query.join(Project, Employee.project_id == Project.id, isouter=True).filter(
-            or_(
-                Employee.name.ilike(f'%{employee_search}%'),
-                Employee.email.ilike(f'%{employee_search}%'),
-                Employee.job_title.ilike(f'%{employee_search}%'),
-                Employee.clock_id.ilike(f'%{employee_search}%'),
-                Project.name.ilike(f'%{employee_search}%')
-            )
-        )
-    
-    # Order and paginate
     skills_paginated = skills_query.order_by(Skill.name).paginate(
         page=skill_page, 
         per_page=per_page,
         error_out=False
     )
     
+    # Use helper for Employee Query (no skill filter needed here, just search)
+    # Pass None for skill filters to the helper
+    employees_query = _get_filtered_employees_query(employee_search, None, None)
+    
+    # Eager load skills data needed for the admin employee table display (if any)
+    # If the admin employee table doesn't show skill details, remove this.
+    # employees_query = employees_query.options(joinedload(Employee.skills).joinedload(EmployeeSkill.skill)) 
+
     employees_paginated = employees_query.order_by(Employee.name).paginate(
         page=employee_page,
         per_page=per_page,
         error_out=False
     )
     
-    # Pass the necessary data directly to the main template
     return render_template('admin.html',
                          projects=projects,
                          levels=levels,
-                         skills=skills_paginated,  # Pass the paginated object
-                         employees=employees_paginated, # Pass the paginated object
+                         skills=skills_paginated,
+                         employees=employees_paginated,
                          admins=admins,
                          current_employee_id=session.get('employee_id'),
                          skill_search=skill_search,
@@ -764,14 +825,95 @@ def edit_employee(employee_id):
     
     if request.method == 'POST':
         try:
+            # Get original values before modification for comparison
+            original_job_title = employee.job_title
+            original_level_id = employee.level_id
+            original_project_id = employee.project_id
+            
+            # Update employee attributes from form
             employee.name = request.form.get('name')
             employee.email = request.form.get('email')
             employee.clock_id = request.form.get('clock_id')
-            employee.job_title = request.form.get('job_title')
-            employee.level_id = request.form.get('level_id')
-            employee.project_id = request.form.get('project_id') or None
-            employee.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
+            new_job_title = request.form.get('job_title')
+            new_level_id = int(request.form.get('level_id')) # Convert to int
+            new_project_id_str = request.form.get('project_id')
+            new_project_id = int(new_project_id_str) if new_project_id_str else None
+            new_start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
+            change_notes = request.form.get('change_notes', '').strip() # Get change notes
+            new_role_start_date_str = request.form.get('new_role_start_date')
             
+            
+            # Check if role-related info changed
+            role_changed = (
+                new_job_title != original_job_title or \
+                new_level_id != original_level_id or \
+                new_project_id != original_project_id
+            )
+            
+            # Apply changes to the employee object
+            employee.job_title = new_job_title
+            employee.level_id = new_level_id
+            employee.project_id = new_project_id
+            employee.start_date = new_start_date # Update overall company start date if explicitly changed
+            
+            if role_changed:
+                # Parse and validate the new role start date
+                try:
+                    new_role_start = datetime.strptime(new_role_start_date_str, '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    flash('Invalid date format for New Role Start Date. Please use YYYY-MM-DD.', 'error')
+                    # Re-render form without committing changes
+                    today_date_str = datetime.utcnow().date().strftime('%Y-%m-%d')
+                    return render_template('edit_employee.html', 
+                                         employee=employee, 
+                                         projects=projects, 
+                                         levels=levels, 
+                                         today_date_str=today_date_str)
+                
+                # Determine the reason for change
+                change_reason = []
+                if new_job_title != original_job_title: change_reason.append("Job Title Change")
+                if new_level_id != original_level_id:
+                    # Basic promotion/demotion logic based on level order
+                    original_level = Level.query.get(original_level_id)
+                    new_level = Level.query.get(new_level_id)
+                    if original_level and new_level:
+                         if new_level.order > original_level.order: change_reason.append("Promotion")
+                         elif new_level.order < original_level.order: change_reason.append("Demotion")
+                         else: change_reason.append("Level Change (Same Order)") # Or handle as needed
+                    else: change_reason.append("Level Change") # Fallback
+                if new_project_id != original_project_id: change_reason.append("Project Change")
+                final_reason = ", ".join(change_reason) if change_reason else "Update"
+                
+                # Find current history record and end it
+                current_history = EmployeeHistory.query.filter_by(
+                    employee_id=employee.id, 
+                    end_date=None
+                ).order_by(desc(EmployeeHistory.start_date)).first()
+                
+                if current_history:
+                    # Validate new_role_start is not before current_history start
+                    if new_role_start <= current_history.start_date:
+                       flash(f'New role start date ({new_role_start.strftime("%Y-%m-%d")}) cannot be on or before the previous role start date ({current_history.start_date.strftime("%Y-%m-%d")}).', 'error')
+                       today_date_str = datetime.utcnow().date().strftime('%Y-%m-%d')
+                       return render_template('edit_employee.html', employee=employee, projects=projects, levels=levels, today_date_str=today_date_str)
+                       
+                    current_history.end_date = new_role_start - timedelta(days=1) # End previous record the day before
+                    db.session.add(current_history)
+                
+                # Create new history record
+                new_history = EmployeeHistory(
+                    employee_id=employee.id,
+                    job_title=new_job_title,
+                    level_id=new_level_id,
+                    project_id=new_project_id,
+                    start_date=new_role_start, # Use the provided start date
+                    end_date=None,
+                    change_reason=final_reason,
+                    notes=change_notes if change_notes else None # Save notes
+                )
+                db.session.add(new_history)
+
             db.session.commit()
             flash('Employee details updated successfully!', 'success')
             return redirect(url_for('index'))
@@ -779,10 +921,13 @@ def edit_employee(employee_id):
             db.session.rollback()
             flash(f'Error updating employee: {str(e)}', 'error')
     
+    # GET request or if POST failed
+    today_date_str = datetime.utcnow().date().strftime('%Y-%m-%d')
     return render_template('edit_employee.html', 
                          employee=employee,
                          projects=projects,
-                         levels=levels)
+                         levels=levels,
+                         today_date_str=today_date_str) # Pass today's date for default
 
 @app.route('/employee/report/<int:employee_id>')
 @login_required
@@ -797,6 +942,12 @@ def employee_report(employee_id):
     # Get all available skills for comparison
     skills = Skill.query.all()
     
+    # Get employee history, ordered by start date descending
+    # Eager load level and project relationships for efficiency
+    history = EmployeeHistory.query.filter_by(employee_id=employee_id)\
+                                 .options(joinedload(EmployeeHistory.level_rel), joinedload(EmployeeHistory.project_rel))\
+                                 .order_by(desc(EmployeeHistory.start_date)).all()
+    
     # Check if the user has permission to view this report
     if not session.get('is_admin', False) and session.get('employee_id') != employee_id:
         flash('You do not have permission to view this report.', 'danger')
@@ -806,6 +957,7 @@ def employee_report(employee_id):
                          employee=employee,
                          skills=skills,
                          today=datetime.utcnow().date(),
+                         history=history, # Pass history to template
                          is_admin=session.get('is_admin', False))
 
 #------------------------------------------------------------------------------
@@ -977,13 +1129,20 @@ def admin_delete_employee(employee_id):
 @admin_required
 def backup_database():
     """Create a backup of the database in SQLite format."""
+    backup_db_path = None # Initialize path variable
     try:
         # Create a temporary SQLite database
-        backup_db_path = 'backup_skills_matrix.db'
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Ensure a unique temporary filename
+        import tempfile, os
+        temp_dir = tempfile.gettempdir()
+        backup_db_path = os.path.join(temp_dir, f'backup_skills_matrix_{timestamp}.db')
         backup_uri = f'sqlite:///{backup_db_path}'
         
         # Create engine for backup database
-        backup_engine = db.create_engine(backup_uri)
+        # Use create_engine directly from sqlalchemy for temporary engine
+        from sqlalchemy import create_engine 
+        backup_engine = create_engine(backup_uri)
         
         # Create all tables in the backup database
         db.Model.metadata.create_all(backup_engine)
@@ -994,19 +1153,22 @@ def backup_database():
         backup_session = BackupSession()
         
         # Get all models from the current database
-        models = [Level, Project, Employee, Skill, EmployeeSkill]
+        # Ensure correct order if there are dependencies not handled by relationships
+        models = [Level, Project, Employee, Skill, EmployeeSkill] 
         
         # Copy data from each model
         for model in models:
-            # Get all records from the current database
-            records = model.query.all()
+            # Get all records from the current database using the app's session
+            with app.app_context(): 
+                records = db.session.query(model).all()
             
             # Insert records into backup database
             for record in records:
                 # Create a new instance without SQLAlchemy's instrumentation
-                backup_record = model()
-                for column in model.__table__.columns:
-                    setattr(backup_record, column.name, getattr(record, column.name))
+                # Detach the instance from the original session if necessary (usually not needed for .all())
+                backup_record_data = {c.name: getattr(record, c.name) for c in model.__table__.columns}
+                backup_record = model(**backup_record_data)
+                
                 backup_session.add(backup_record)
         
         # Commit the backup
@@ -1015,33 +1177,38 @@ def backup_database():
         
         # Send the file
         from flask import send_file
-        import os
-        from datetime import datetime
         
         # Generate filename with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         download_name = f'skills_matrix_backup_{timestamp}.db'
         
-        return_data = send_file(
+        # Use after_this_request correctly within the try block where the file is created
+        @after_this_request
+        def remove_file(response):
+            if backup_db_path and os.path.exists(backup_db_path):
+                try:
+                    os.remove(backup_db_path)
+                    app.logger.info(f"Successfully removed temporary backup file: {backup_db_path}")
+                except Exception as error_remove:
+                    app.logger.error(f"Error removing temporary backup file {backup_db_path}: {error_remove}")
+            return response
+
+        return send_file(
             backup_db_path,
             mimetype='application/x-sqlite3',
             as_attachment=True,
             download_name=download_name
         )
         
-        # Clean up the temporary file after sending
-        @after_this_request
-        def remove_file(response):
-            try:
-                os.remove(backup_db_path)
-            except Exception as e:
-                app.logger.error(f"Error removing temporary backup file: {e}")
-            return response
-            
-        return return_data
-        
     except Exception as e:
-        flash(f'Error creating backup: {str(e)}', 'error')
+        # Log the full error for debugging
+        app.logger.error(f"Error creating backup: {str(e)}", exc_info=True)
+        flash(f'Error creating backup: An internal error occurred. Check logs.', 'error')
+        # Clean up potentially created file on error before redirect
+        if backup_db_path and os.path.exists(backup_db_path):
+             try:
+                 os.remove(backup_db_path)
+             except Exception as error_remove_fail:
+                 app.logger.error(f"Error removing backup file after failure {backup_db_path}: {error_remove_fail}")
         return redirect(url_for('admin'))
 
 @app.route('/admin/database/restore', methods=['POST'])
@@ -1132,10 +1299,138 @@ def restore_database():
         return redirect(url_for('admin'))
 
 #------------------------------------------------------------------------------
+# Export Routes
+#------------------------------------------------------------------------------
+
+@app.route('/export/employees')
+@login_required
+@admin_required # Only admins can export the full filtered list
+def export_employees_csv():
+    """Exports the filtered employee list to a CSV file."""
+    try:
+        # Get filters from query parameters
+        search_query = request.args.get('search', '').strip()
+        filter_skill_id = request.args.get('skill_id', type=int)
+        filter_min_proficiency = request.args.get('min_proficiency', type=int)
+        # If proficiency is not explicitly set but skill is, default to 1 for filtering
+        if filter_skill_id and filter_min_proficiency is None:
+             filter_min_proficiency = 1
+        
+        # Get the filtered query using the helper
+        query = _get_filtered_employees_query(search_query, filter_skill_id, filter_min_proficiency)
+        
+        # Eager load skills data needed for counts in the export
+        # Apply this option specifically for the export context
+        query = query.options(joinedload(Employee.skills).joinedload(EmployeeSkill.skill))
+        
+        # Execute the query to get all matching employees (no pagination)
+        employees = query.order_by(Employee.name).all()
+        
+        # Prepare CSV data
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write Header
+        header = [
+            'Name', 'Email', 'Clock ID', 'Job Title', 'Level', 'Project', 
+            'Start Date', 'Skills Count', 'Training Required Count', 'Training Expired Count'
+        ]
+        writer.writerow(header)
+        
+        # Write Data Rows
+        today = datetime.utcnow().date()
+        for employee in employees:
+            # Calculate skill counts (requires employee.skills to be loaded)
+            skill_count = len(employee.skills)
+            training_required = sum(1 for es in employee.skills if es.skill and es.skill.requires_training)
+            expired_count = sum(1 for es in employee.skills if es.training_expiry_date and es.training_expiry_date < today)
+            
+            row = [
+                employee.name,
+                employee.email,
+                employee.clock_id if employee.clock_id else '',
+                employee.job_title,
+                employee.level_rel.name if employee.level_rel else '',
+                employee.project_rel.name if employee.project_rel else '',
+                employee.start_date.strftime('%Y-%m-%d') if employee.start_date else '',
+                skill_count,
+                training_required,
+                expired_count
+            ]
+            writer.writerow(row)
+        
+        # Prepare response
+        output.seek(0)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'employee_list_{timestamp}.csv'
+        
+        return Response(
+            output,
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment;filename={filename}"}
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Error exporting employees to CSV: {str(e)}", exc_info=True)
+        flash('An error occurred while generating the CSV export.', 'error')
+        # Redirect back to index, preserving filters if possible
+        return redirect(url_for('index', 
+                                search=request.args.get('search', ''),
+                                skill_id=request.args.get('skill_id'),
+                                min_proficiency=request.args.get('min_proficiency')))
+
+#------------------------------------------------------------------------------
+# User Profile Route
+#------------------------------------------------------------------------------
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    """Allows users to view and edit their profile."""
+    user = Employee.query.get_or_404(session['employee_id'])
+    form = ProfileForm(obj=user) # Pre-populate form
+    # Use username and job_title from user object for the form
+    form.username.data = user.name
+    form.job_title.data = user.job_title
+    form.level_name.data = user.level_rel.name if user.level_rel else ''
+    form.project_name.data = user.project_rel.name if user.project_rel else ''
+    form.start_date_str.data = user.start_date.strftime('%Y-%m-%d') if user.start_date else ''
+
+    if form.validate_on_submit():
+        try:
+            # Check if email is changing and if it's already taken by another user
+            if form.email.data != user.email:
+                existing_user = Employee.query.filter(Employee.email == form.email.data, Employee.id != user.id).first()
+                if existing_user:
+                    flash('That email address is already in use. Please choose a different one.', 'error')
+                    return render_template('profile.html', form=form, title="User Profile")
+
+            user.email = form.email.data
+            user.about_me = form.about_me.data
+            user.phone_number = form.phone_number.data # Save phone number
+            user.linkedin_url = form.linkedin_url.data # Save LinkedIn URL
+            db.session.commit()
+            flash('Your profile has been updated.', 'success')
+            return redirect(url_for('profile'))
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Error updating profile for user {user.id}: {str(e)}", exc_info=True)
+            flash('An error occurred while updating your profile. Please try again.', 'error')
+
+    elif request.method == 'POST':
+        # Form validation failed
+        flash('Please correct the errors below.', 'warning')
+
+    return render_template('profile.html', form=form, title="User Profile")
+
+#------------------------------------------------------------------------------
 # Application Entry Point
 #------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        # Ensure tables are created if they don't exist
+        # Consider moving init_db or db.create_all() call here if not handled by Flask-Migrate or similar
+        # db.create_all() # Uncomment if you want to ensure tables on every run (might be slow)
+        pass # Assuming init_db(app) handles table creation adequately
     app.run(debug=True) 
