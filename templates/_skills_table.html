@@ -4,6 +4,7 @@
             <tr>
                 <th>Skill Name</th>
                 <th>Description</th>
+                <th>Training Category</th>
                 <th>Training Required</th>
                 <th>Training Validity</th>
                 <th class="text-end">Actions</th>
@@ -14,6 +15,7 @@
                 <tr>
                     <td>{{ skill.name }}</td>
                     <td>{{ skill.description or '-' }}</td>
+                    <td>{{ skill.training_category or '-' }}</td>
                     <td>
                         {% if skill.requires_training %}
                             <span class="badge bg-info">
@@ -33,7 +35,7 @@
                     <td class="text-end">
                         <button type="button" 
                                 class="btn btn-primary btn-sm"
-                                onclick="editSkill({{ skill.id }}, '{{ skill.name }}', '{{ skill.description or '' }}', {{ 'true' if skill.requires_training else 'false' }}, {{ skill.training_expiry_months or 0 }}, '{{ skill.training_details or '' }}')"
+                                onclick="editSkill({{ skill.id }}, '{{ skill.name | e }}', '{{ skill.description | e or '' }}', {{ 'true' if skill.requires_training else 'false' }}, {{ skill.training_expiry_months or 'null' }}, '{{ skill.training_details | e or '' }}', '{{ skill.training_category or '' | e }}')"
                                 data-bs-toggle="modal" 
                                 data-bs-target="#editSkillModal">
                             <i class="fas fa-edit"></i>
@@ -50,7 +52,7 @@
                 </tr>
             {% else %}
                 <tr>
-                    <td colspan="5" class="text-center text-muted py-4">
+                    <td colspan="6" class="text-center text-muted py-4">
                         {% if skill_search %}
                             No skills found matching your search
                         {% else %}

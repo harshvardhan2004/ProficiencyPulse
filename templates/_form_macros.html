@@ -1,0 +1,30 @@
+{% macro render_field(field, type='text', class='form-control', rows=None) %}
+    <div class="form-floating mb-3">
+        {{ field(class=class, type=type, rows=rows, **kwargs)|safe }}
+        {{ field.label }}
+        {% if field.errors %}
+            <div class="invalid-feedback d-block">
+                {% for error in field.errors %}
+                    <span>{{ error }}</span><br>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if field.description %}
+            <div class="form-text">{{ field.description }}</div>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{% macro render_field_nolabel(field, type='text', class='form-control', rows=None) %}
+    {{ field(class=class, type=type, rows=rows, **kwargs)|safe }}
+    {% if field.errors %}
+        <div class="invalid-feedback d-block">
+            {% for error in field.errors %}
+                <span>{{ error }}</span><br>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {% if field.description %}
+        <div class="form-text">{{ field.description }}</div>
+    {% endif %}
+{% endmacro %} 

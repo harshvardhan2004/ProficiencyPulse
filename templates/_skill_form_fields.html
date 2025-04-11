@@ -1,0 +1,33 @@
+{% from "_form_macros.html" import render_field, render_field_nolabel %}
+
+<div class="row g-3">
+    <div class="col-12">
+        {{ render_field(form.name) }}
+    </div>
+    <div class="col-12">
+        {{ render_field(form.description, rows=3) }}
+    </div>
+    <div class="col-12">
+        {{ render_field(form.training_category) }}
+    </div>
+    <div class="col-12">
+        <div class="card bg-light border-0">
+            <div class="card-body">
+                <div class="form-check form-switch mb-3">
+                     {{ form.requires_training(class='form-check-input') }}
+                     {{ form.requires_training.label(class='form-check-label fw-bold') }}
+                 </div>
+                <div id="trainingDetailsSection{{ form.csrf_token.name }}" class="training-details-section" style="display: {{ 'block' if form.requires_training.data else 'none' }};">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                           {{ render_field(form.training_expiry_months) }}
+                        </div>
+                        <div class="col-12">
+                           {{ render_field(form.training_details, rows=3) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> 

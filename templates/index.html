@@ -63,29 +63,14 @@
             </div>
         </form>
     </div>
-    <div class="col-auto">
-        <div class="btn-group">
-            {% if is_admin %}
-                <a href="{{ url_for('add_employee') }}" class="btn btn-primary">
-                    <i class="fas fa-user-plus me-2"></i>Add Employee
-                </a>
-                <a href="{{ url_for('add_skill') }}" class="btn btn-outline-primary">
-                    <i class="fas fa-plus-circle me-2"></i>Add Skill
-                </a>
-            {% endif %}
-        </div>
-    </div>
 </div>
 
 {% if not employees %}
     <div class="card">
         <div class="card-body text-center py-5">
             <i class="fas fa-users text-muted mb-3" style="font-size: 3rem;"></i>
-            <h3 class="text-muted">No employees yet</h3>
-            <p class="text-muted mb-4">Start by adding your first team member</p>
-            <a href="{{ url_for('add_employee') }}" class="btn btn-primary btn-lg">
-                <i class="fas fa-user-plus me-2"></i>Add Employee
-            </a>
+            <h3 class="text-muted">No employees found</h3>
+            <p class="text-muted mb-4">Adjust search filters or add employees via the Admin Panel.</p>
         </div>
     </div>
 {% else %}
@@ -178,10 +163,7 @@
         <div class="card-body text-center py-5">
             <i class="fas fa-lightbulb text-muted mb-3" style="font-size: 3rem;"></i>
             <h3 class="text-muted">No skills defined</h3>
-            <p class="text-muted mb-4">Start by adding skills to track</p>
-            <a href="{{ url_for('add_skill') }}" class="btn btn-primary btn-lg">
-                <i class="fas fa-plus-circle me-2"></i>Add Skill
-            </a>
+            <p class="text-muted mb-4">Add skills via the Admin Panel.</p>
         </div>
     </div>
 {% endif %}

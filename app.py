@@ -11,12 +11,13 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import inspect, or_, desc
 from sqlalchemy.orm import joinedload
+from sqlalchemy.types import JSON # Import JSON type
 import click
 import io
 import csv
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, EmailField, SubmitField, PasswordField
-from wtforms.validators import DataRequired, Length, Email, EqualTo, Optional, URL
+from wtforms import StringField, TextAreaField, EmailField, SubmitField, PasswordField, BooleanField, IntegerField, SelectField
+from wtforms.validators import DataRequired, Length, Email, EqualTo, Optional, URL, NumberRange
 from flask_migrate import Migrate
 
 # Local application imports
@@ -102,6 +103,7 @@ class Skill(db.Model):
     requires_training = db.Column(db.Boolean, default=False)
     training_expiry_months = db.Column(db.Integer)  # Number of months before training expires
     training_details = db.Column(db.Text)  # Details about required training
+    training_category = db.Column(db.String(50), nullable=True) # e.g., 'External Formal', 'Internal Formal', 'Informal'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee_skills = db.relationship('EmployeeSkill', backref='skill', lazy=True)
 
@@ -181,6 +183,36 @@ class ProfileForm(FlaskForm):
     linkedin_url = StringField('LinkedIn Profile URL', validators=[Optional(), URL(), Length(max=255)])
     about_me = TextAreaField('About Me', validators=[Length(min=0, max=500)])
     submit = SubmitField('Update Profile')
+
+# Form for adding/editing skills
+class SkillForm(FlaskForm):
+    name = StringField('Skill Name', validators=[DataRequired(), Length(max=100)])
+    description = TextAreaField('Description', validators=[Optional(), Length(max=1000)])
+    training_category = SelectField('Training Category',
+                                  choices=[
+                                      ('', 'Select Category...'),
+                                      ('Formal External', 'Formal External'),
+                                      ('Formal Internal', 'Formal Internal'),
+                                      ('Informal', 'Informal/On-the-Job')
+                                  ], validators=[Optional()])
+    requires_training = BooleanField('Requires Formal Training')
+    training_expiry_months = IntegerField('Validity Period (months)',
+                                        validators=[Optional(), NumberRange(min=1)])
+    training_details = TextAreaField('Training Requirements', validators=[Optional(), Length(max=1000)])
+    submit = SubmitField('Save Skill')
+
+# Model for Audit Trail
+class AuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True) # Nullable for system actions
+    user_email = db.Column(db.String(120), nullable=True) # Store email for easier viewing
+    action = db.Column(db.String(255), nullable=False, index=True)
+    target_type = db.Column(db.String(50), nullable=True, index=True)
+    target_id = db.Column(db.Integer, nullable=True)
+    details = db.Column(JSON, nullable=True) # Store additional info like changes
+
+    user = db.relationship('Employee') # Relationship to Employee
 
 #------------------------------------------------------------------------------
 # CLI Commands for Database Management
@@ -283,6 +315,8 @@ def login():
             session['employee_id'] = employee.id
             session['user_name'] = employee.name # Store user name
             session['is_admin'] = True
+            log_audit(action="Admin Login Success", user_id=employee.id, user_email=employee.email)
+            db.session.commit() # Commit log entry
             flash('Logged in successfully as administrator.', 'success')
             return redirect(url_for('admin'))
         elif employee and employee.clock_id == identifier:
@@ -291,9 +325,14 @@ def login():
             session['employee_id'] = employee.id
             session['user_name'] = employee.name # Store user name
             session['is_admin'] = False
+            log_audit(action="User Login Success", user_id=employee.id, user_email=employee.email)
+            db.session.commit() # Commit log entry
             flash('Logged in successfully.', 'success')
             return redirect(url_for('index'))
         else:
+            # Log failed login attempt
+            log_audit(action="Login Failed", details={'identifier': identifier})
+            db.session.commit() # Commit log entry
             flash('Invalid credentials.', 'error')
     
     return render_template('login.html')
@@ -301,7 +340,11 @@ def login():
 @app.route('/logout')
 def logout():
     """Clear user session and redirect to login page."""
+    user_id = session.get('employee_id') # Get user ID before clearing
+    user_email = session.get('user_name') # Assuming user_name holds email, adjust if needed
+    log_audit(action="User Logout", user_id=user_id, user_email=user_email) # Log before clearing
     session.clear()
+    db.session.commit() # Commit log entry after clearing session (might be safer)
     flash('Logged out successfully.', 'success')
     return redirect(url_for('login'))
 
@@ -329,6 +372,28 @@ def login_required(f):
 #------------------------------------------------------------------------------
 # Helper Functions
 #------------------------------------------------------------------------------
+
+def log_audit(action, target_type=None, target_id=None, details=None):
+    """Helper function to log an audit trail entry."""
+    user_id = session.get('employee_id')
+    user_email = None
+    if user_id:
+        # Querying the user just for the email might be slightly inefficient.
+        # Consider storing email in session if performance becomes an issue.
+        user = Employee.query.get(user_id)
+        if user:
+            user_email = user.email
+    
+    log_entry = AuditLog(
+        user_id=user_id,
+        user_email=user_email,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        details=details
+    )
+    db.session.add(log_entry)
+    # Note: The commit happens in the route where this is called.
 
 def _get_filtered_employees_query(search_query, filter_skill_id, filter_min_proficiency):
     """Builds the base query for employees with optional filtering."""
@@ -452,7 +517,9 @@ def add_project():
             project = Project(name=name)
             db.session.add(project)
             db.session.commit()
-            return {'success': True, 'id': project.id, 'name': project.name}
+            log_audit(action="Project Added", target_type="Project", target_id=project.id, details={'name': name})
+            db.session.commit()
+            flash('Project added successfully!', 'success')
     except Exception as e:
         db.session.rollback()
         return {'success': False, 'error': str(e)}, 400
@@ -527,6 +594,8 @@ def add_skill():
                 )
                 db.session.add(skill)
                 db.session.commit()
+                log_audit(action="Skill Added", target_type="Skill", target_id=skill.id, details={'name': skill.name})
+                db.session.commit()
                 flash('Skill added successfully!', 'success')
                 return redirect(url_for('index'))
         except Exception as e:
@@ -550,6 +619,12 @@ def update_employee_skills(employee_id):
     all_skills = Skill.query.order_by(Skill.name).all() # Fetch all possible skills for the form
 
     if request.method == 'POST':
+        # Dictionary to store changes for logging
+        log_details = {
+            'skills_added': [],
+            'skills_updated': [],
+            'skills_removed': [] # This will be populated later
+        }
         try:
             # Get existing skills for this employee, keyed by skill_id
             existing_employee_skills = {es.skill_id: es for es in employee.skills}
@@ -577,47 +652,65 @@ def update_employee_skills(employee_id):
                             continue # Skip this skill update if date is invalid
 
 
-                    if skill_id in existing_employee_skills:
-                        # Update existing skill only if data has changed
-                        employee_skill = existing_employee_skills[skill_id]
-                        needs_update = False
-                        if employee_skill.proficiency_level != level:
-                            employee_skill.proficiency_level = level
-                            needs_update = True
-                        if employee_skill.last_training_date != last_training_date:
-                             employee_skill.last_training_date = last_training_date
-                             needs_update = True
-                        # Treat empty string notes as None for comparison
-                        current_notes = employee_skill.notes if employee_skill.notes else ''
-                        submitted_notes = notes if notes else ''
-                        if current_notes != submitted_notes:
-                             employee_skill.notes = notes if notes else None
-                             needs_update = True
+                if skill_id in existing_employee_skills:
+                    # Update existing skill
+                    employee_skill = existing_employee_skills[skill_id]
+                    # Capture original state for logging changes
+                    original_level = employee_skill.proficiency_level
+                    original_date = employee_skill.last_training_date
+                    original_notes = employee_skill.notes if employee_skill.notes else ''
+                    
+                    needs_update = False
+                    change_info = {}
+                    if employee_skill.proficiency_level != level:
+                        change_info['proficiency'] = {'old': original_level, 'new': level}
+                        employee_skill.proficiency_level = level
+                        needs_update = True
+                    if employee_skill.last_training_date != last_training_date:
+                         change_info['training_date'] = {'old': str(original_date) if original_date else None, 'new': str(last_training_date) if last_training_date else None}
+                         employee_skill.last_training_date = last_training_date
+                         needs_update = True
+                    submitted_notes = notes if notes else ''
+                    if original_notes != submitted_notes:
+                         change_info['notes'] = {'old': original_notes, 'new': submitted_notes}
+                         employee_skill.notes = notes if notes else None
+                         needs_update = True
 
-                        if needs_update:
-                            employee_skill.calculate_and_set_expiry_date() # Recalculate expiry
-                            db.session.add(employee_skill) # Add to session if updated (SQLAlchemy handles updates)
-
-                    else:
-                        # Add new skill
-                        # Skill object is already available from the 'all_skills' loop
-                        employee_skill = EmployeeSkill(
-                            employee_id=employee_id,
-                            skill_id=skill_id,
-                            proficiency_level=level,
-                            last_training_date=last_training_date,
-                            notes=notes if notes else None,
-                            skill=skill # Associate the skill object directly
-                        )
-                        employee_skill.calculate_and_set_expiry_date() # Calculate expiry
+                    if needs_update:
+                        employee_skill.calculate_and_set_expiry_date()
                         db.session.add(employee_skill)
+                        log_details['skills_updated'].append({'name': skill.name, **change_info}) # Log specific changes
+
+                else:
+                    # Add new skill
+                    # Skill object is already available from the 'all_skills' loop
+                    employee_skill = EmployeeSkill(
+                        employee_id=employee_id,
+                        skill_id=skill_id,
+                        proficiency_level=level,
+                        last_training_date=last_training_date,
+                        notes=notes if notes else None,
+                        skill=skill # Associate the skill object directly
+                    )
+                    employee_skill.calculate_and_set_expiry_date() # Calculate expiry
+                    db.session.add(employee_skill)
+                    log_details['skills_added'].append({
+                        'name': skill.name, 
+                        'level': level, 
+                        'date': str(last_training_date) if last_training_date else None,
+                        'notes': notes if notes else None
+                    })
 
             # Delete skills that were previously assigned but not in the form submission
             skill_ids_to_delete = set(existing_employee_skills.keys()) - submitted_skill_ids
+            if skill_ids_to_delete:
+                log_details['skills_removed'] = [s.name for s in Skill.query.filter(Skill.id.in_(skill_ids_to_delete)).all()]
             for skill_id in skill_ids_to_delete:
                 skill_to_delete = existing_employee_skills[skill_id]
                 db.session.delete(skill_to_delete)
 
+            db.session.commit()
+            log_audit(action="Employee Skills Updated", target_type="Employee", target_id=employee_id, details=log_details)
             db.session.commit()
             flash('Skills updated successfully!', 'success')
             # Redirect to the employee's report page for better UX
@@ -654,17 +747,11 @@ def admin():
     # Skills Query (remains the same)
     skills_query = Skill.query
     if skill_search:
-        skills_query = skills_query.filter(
-            or_(
-                Skill.name.ilike(f'%{skill_search}%'),
-                Skill.description.ilike(f'%{skill_search}%')
-            )
-        )
-    skills_paginated = skills_query.order_by(Skill.name).paginate(
-        page=skill_page, 
-        per_page=per_page,
-        error_out=False
-    )
+        skills_query = skills_query.filter(Skill.name.ilike(f'%{skill_search}%'))
+    skills_pagination = skills_query.order_by(Skill.name).paginate(page=skill_page, per_page=10, error_out=False)
+    
+    add_skill_form = SkillForm() # Form for adding skills
+    edit_skill_form = SkillForm() # Form for editing skills (will be populated by JS)
     
     # Use helper for Employee Query (no skill filter needed here, just search)
     # Pass None for skill filters to the helper
@@ -683,12 +770,14 @@ def admin():
     return render_template('admin.html',
                          projects=projects,
                          levels=levels,
-                         skills=skills_paginated,
+                         skills=skills_pagination,
                          employees=employees_paginated,
                          admins=admins,
                          current_employee_id=session.get('employee_id'),
                          skill_search=skill_search,
-                         employee_search=employee_search)
+                         employee_search=employee_search,
+                         add_skill_form=add_skill_form,
+                         edit_skill_form=edit_skill_form)
 
 @app.route('/admin/project/add', methods=['POST'])
 @admin_required
@@ -698,6 +787,8 @@ def admin_add_project():
         if name:
             project = Project(name=name)
             db.session.add(project)
+            db.session.commit()
+            log_audit(action="Project Added", target_type="Project", target_id=project.id, details={'name': name})
             db.session.commit()
             flash('Project added successfully!', 'success')
     except Exception as e:
@@ -711,7 +802,10 @@ def admin_delete_project(project_id):
     try:
         project = Project.query.get_or_404(project_id)
         if not project.employees:  # Only delete if no employees are assigned
+            project_name = project.name # Get name before deletion
             db.session.delete(project)
+            db.session.commit()
+            log_audit(action="Project Deleted", target_type="Project", target_id=project_id, details={'name': project_name})
             db.session.commit()
             flash('Project deleted successfully!', 'success')
         else:
@@ -731,6 +825,8 @@ def admin_add_level():
             level = Level(name=name, order=order)
             db.session.add(level)
             db.session.commit()
+            log_audit(action="Level Added", target_type="Level", target_id=level.id, details={'name': name, 'order': order})
+            db.session.commit()
             flash('Level added successfully!', 'success')
     except Exception as e:
         db.session.rollback()
@@ -743,7 +839,10 @@ def admin_delete_level(level_id):
     try:
         level = Level.query.get_or_404(level_id)
         if not level.employees:  # Only delete if no employees are assigned
+            level_name = level.name # Get name before deletion
             db.session.delete(level)
+            db.session.commit()
+            log_audit(action="Level Deleted", target_type="Level", target_id=level_id, details={'name': level_name})
             db.session.commit()
             flash('Level deleted successfully!', 'success')
         else:
@@ -756,49 +855,103 @@ def admin_delete_level(level_id):
 @app.route('/admin/skill/add', methods=['POST'])
 @admin_required
 def admin_add_skill():
-    try:
-        name = request.form.get('name')
-        description = request.form.get('description')
-        requires_training = 'requires_training' in request.form
-        training_expiry_months = request.form.get('training_expiry_months')
-        training_details = request.form.get('training_details')
-        
-        if name:
-            skill = Skill(
-                name=name,
-                description=description,
-                requires_training=requires_training,
-                training_expiry_months=training_expiry_months if training_expiry_months else None,
-                training_details=training_details
-            )
-            db.session.add(skill)
-            db.session.commit()
-            flash('Skill added successfully!', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error adding skill: {str(e)}', 'error')
-    return redirect(url_for('admin'))
+    """Handles adding a new skill via the admin panel using WTForms."""
+    form = SkillForm()
+    if form.validate_on_submit():
+        try:
+            # Check if skill name already exists
+            existing_skill = Skill.query.filter(Skill.name.ilike(form.name.data)).first()
+            if existing_skill:
+                flash(f'Skill "{form.name.data}" already exists.', 'warning')
+            else:
+                skill = Skill(
+                    name=form.name.data,
+                    description=form.description.data,
+                    training_category=form.training_category.data or None,
+                    requires_training=form.requires_training.data,
+                    training_expiry_months=form.training_expiry_months.data if form.requires_training.data else None,
+                    training_details=form.training_details.data if form.requires_training.data else None
+                )
+                db.session.add(skill)
+                db.session.commit()
+                log_audit(action="Skill Added", target_type="Skill", target_id=skill.id, details={'name': skill.name})
+                db.session.commit()
+                flash('Skill added successfully!', 'success')
+                return redirect(url_for('admin')) # Redirect to clear form
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error adding skill: {str(e)}', 'error')
+    else:
+        # Handle validation errors - flash messages
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {getattr(form, field).label.text}: {error}", 'error')
+                
+    # Redirect back to admin page (usually to the skills tab) even on error
+    # You might want to add logic to re-open the correct tab
+    return redirect(url_for('admin')) # Consider redirecting with anchor #skills-management
 
 @app.route('/admin/skill/edit/<int:skill_id>', methods=['POST'])
 @admin_required
 def admin_edit_skill(skill_id):
-    try:
-        skill = Skill.query.get_or_404(skill_id)
-        
-        skill.name = request.form.get('name')
-        skill.description = request.form.get('description')
-        skill.requires_training = 'requires_training' in request.form
-        
-        training_expiry_months = request.form.get('training_expiry_months')
-        skill.training_expiry_months = training_expiry_months if training_expiry_months else None
-        skill.training_details = request.form.get('training_details')
-        
-        db.session.commit()
-        flash('Skill updated successfully!', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error updating skill: {str(e)}', 'error')
-    return redirect(url_for('admin'))
+    """Handles editing an existing skill via the admin panel using WTForms."""
+    skill = Skill.query.get_or_404(skill_id)
+    # Capture original data before form processing
+    original_data = {
+        'name': skill.name,
+        'description': skill.description,
+        'training_category': skill.training_category,
+        'requires_training': skill.requires_training,
+        'training_expiry_months': skill.training_expiry_months,
+        'training_details': skill.training_details
+    }
+    form = SkillForm(obj=skill) # Pre-populate form with existing skill data
+    
+    if form.validate_on_submit():
+        try:
+            # Check if name is being changed to one that already exists
+            new_name = form.name.data
+            if new_name.lower() != skill.name.lower(): # Case-insensitive check
+                existing_skill = Skill.query.filter(Skill.name.ilike(new_name), Skill.id != skill_id).first()
+                if existing_skill:
+                    flash(f'Skill name "{new_name}" already exists.', 'warning')
+                    # Need to re-render or handle this without losing edits - JS approach is better here
+                    # For simplicity now, just redirecting back might lose edits.
+                    return redirect(url_for('admin')) 
+            
+            # Update skill object from form data
+            skill.name = new_name
+            skill.description = form.description.data
+            skill.training_category = form.training_category.data or None
+            skill.requires_training = form.requires_training.data
+            skill.training_expiry_months = form.training_expiry_months.data if skill.requires_training else None
+            skill.training_details = form.training_details.data if skill.requires_training else None
+            
+            db.session.commit()
+            # Log changes
+            changes = {}
+            if skill.name != original_data['name']: changes['name'] = {'old': original_data['name'], 'new': skill.name}
+            if skill.description != original_data['description']: changes['description'] = {'old': original_data['description'], 'new': skill.description}
+            if skill.training_category != original_data['training_category']: changes['training_category'] = {'old': original_data['training_category'], 'new': skill.training_category}
+            if skill.requires_training != original_data['requires_training']: changes['requires_training'] = {'old': original_data['requires_training'], 'new': skill.requires_training}
+            if skill.training_expiry_months != original_data['training_expiry_months']: changes['training_expiry_months'] = {'old': original_data['training_expiry_months'], 'new': skill.training_expiry_months}
+            if skill.training_details != original_data['training_details']: changes['training_details'] = {'old': original_data['training_details'], 'new': skill.training_details}
+
+            log_audit(action="Skill Edited", target_type="Skill", target_id=skill_id, details=changes if changes else None)
+            db.session.commit()
+            flash('Skill updated successfully!', 'success')
+            return redirect(url_for('admin')) # Redirect to clear form
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating skill: {str(e)}', 'error')
+    else:
+        # Handle validation errors
+        for field, errors in form.errors.items():
+            for error in errors:
+                 flash(f"Error in {getattr(form, field).label.text}: {error}", 'error')
+                 
+    # Redirect back to admin page (usually to the skills tab) even on error
+    return redirect(url_for('admin')) # Consider redirecting with anchor #skills-management
 
 @app.route('/admin/skill/delete/<int:skill_id>', methods=['POST'])
 @admin_required
@@ -806,7 +959,10 @@ def admin_delete_skill(skill_id):
     try:
         skill = Skill.query.get_or_404(skill_id)
         if not skill.employee_skills:  # Only delete if no employees are using this skill
+            skill_name = skill.name # Get name before deletion
             db.session.delete(skill)
+            db.session.commit()
+            log_audit(action="Skill Deleted", target_type="Skill", target_id=skill_id, details={'name': skill_name})
             db.session.commit()
             flash('Skill deleted successfully!', 'success')
         else:
@@ -820,6 +976,16 @@ def admin_delete_skill(skill_id):
 @admin_required
 def edit_employee(employee_id):
     employee = Employee.query.get_or_404(employee_id)
+    # Capture relevant original data
+    original_data = {
+        'name': employee.name,
+        'email': employee.email,
+        'clock_id': employee.clock_id,
+        'job_title': employee.job_title,
+        'level_id': employee.level_id,
+        'project_id': employee.project_id,
+        'start_date': employee.start_date.isoformat() if employee.start_date else None
+    }
     projects = Project.query.order_by(Project.name).all()
     levels = Level.query.order_by(Level.order).all()
     
@@ -915,6 +1081,19 @@ def edit_employee(employee_id):
                 db.session.add(new_history)
 
             db.session.commit()
+            # Log changes
+            changes = {}
+            if employee.name != original_data['name']: changes['name'] = {'old': original_data['name'], 'new': employee.name}
+            if employee.email != original_data['email']: changes['email'] = {'old': original_data['email'], 'new': employee.email}
+            if employee.clock_id != original_data['clock_id']: changes['clock_id'] = {'old': original_data['clock_id'], 'new': employee.clock_id}
+            if employee.job_title != original_data['job_title']: changes['job_title'] = {'old': original_data['job_title'], 'new': employee.job_title}
+            if employee.level_id != original_data['level_id']: changes['level_id'] = {'old': original_data['level_id'], 'new': employee.level_id}
+            if employee.project_id != original_data['project_id']: changes['project_id'] = {'old': original_data['project_id'], 'new': employee.project_id}
+            new_start_date_iso = employee.start_date.isoformat() if employee.start_date else None
+            if new_start_date_iso != original_data['start_date']: changes['start_date'] = {'old': original_data['start_date'], 'new': new_start_date_iso}
+            
+            log_audit(action="Employee Edited", target_type="Employee", target_id=employee_id, details=changes if changes else {'note': 'No base details changed'})
+            db.session.commit()
             flash('Employee details updated successfully!', 'success')
             return redirect(url_for('index'))
         except Exception as e:
@@ -974,6 +1153,15 @@ def create_admin_command(email, name, password):
     Required for initial system setup.
     """
     try:
+        # Check if level 1 exists, create if not
+        level1 = Level.query.filter_by(order=1).first()
+        if not level1:
+            level1 = Level(name="Default Admin Level", order=1)
+            db.session.add(level1)
+            db.session.flush() # Get ID
+            click.echo('Created default Level 1 for admin user.')
+        level_id_to_use = level1.id
+            
         admin = Employee.query.filter_by(email=email).first()
         if admin:
             click.echo('Admin user already exists.')
@@ -984,11 +1172,13 @@ def create_admin_command(email, name, password):
             name=name,
             is_admin=True,
             job_title='Administrator',
-            level_id=1,  # Default to first level
+            level_id=level_id_to_use,  # Use found/created level 1
             start_date=datetime.utcnow().date()
         )
         admin.set_password(password)
         db.session.add(admin)
+        db.session.commit()
+        log_audit(action="Admin Created (CLI)", target_type="Employee", target_id=admin.id, details={'email': email, 'name': name})
         db.session.commit()
         click.echo('Admin user created successfully.')
     except Exception as e:
@@ -1025,6 +1215,8 @@ def admin_add_admin():
             
             db.session.add(admin)
             db.session.commit()
+            log_audit(action="Admin Added (UI)", target_type="Employee", target_id=admin.id, details={'email': email, 'name': name})
+            db.session.commit()
             flash('Admin user added successfully!', 'success')
         else:
             flash('All fields are required.', 'error')
@@ -1046,8 +1238,11 @@ def admin_remove_admin(employee_id):
         
         employee = Employee.query.get_or_404(employee_id)
         if employee.is_admin:
+            employee_email = employee.email # Get email before change
             employee.is_admin = False
             employee.password_hash = None  # Clear password hash as it's no longer needed
+            db.session.commit()
+            log_audit(action="Admin Privileges Removed", target_type="Employee", target_id=employee_id, details={'email': employee_email})
             db.session.commit()
             flash('Admin privileges removed successfully.', 'success')
         else:
@@ -1113,11 +1308,15 @@ def admin_delete_employee(employee_id):
             flash('Cannot delete admin users through this interface.', 'error')
             return redirect(url_for('admin'))
         
+        employee_name = employee.name # Get name before deletion
+        employee_email = employee.email # Get email before deletion
         # Delete associated skills first
         EmployeeSkill.query.filter_by(employee_id=employee_id).delete()
         
         # Delete the employee
         db.session.delete(employee)
+        db.session.commit()
+        log_audit(action="Employee Deleted", target_type="Employee", target_id=employee_id, details={'name': employee_name, 'email': employee_email})
         db.session.commit()
         flash('Employee deleted successfully!', 'success')
     except Exception as e:
@@ -1388,6 +1587,13 @@ def export_employees_csv():
 def profile():
     """Allows users to view and edit their profile."""
     user = Employee.query.get_or_404(session['employee_id'])
+    # Capture original data
+    original_profile_data = {
+        'email': user.email,
+        'about_me': user.about_me or '',
+        'phone_number': user.phone_number or '',
+        'linkedin_url': user.linkedin_url or ''
+    }
     form = ProfileForm(obj=user) # Pre-populate form
     # Use username and job_title from user object for the form
     form.username.data = user.name
@@ -1410,6 +1616,18 @@ def profile():
             user.phone_number = form.phone_number.data # Save phone number
             user.linkedin_url = form.linkedin_url.data # Save LinkedIn URL
             db.session.commit()
+            
+            # Log profile changes
+            profile_changes = {}
+            if user.email != original_profile_data['email']: profile_changes['email'] = {'old': original_profile_data['email'], 'new': user.email}
+            if (user.about_me or '') != original_profile_data['about_me']: profile_changes['about_me'] = {'old': original_profile_data['about_me'], 'new': user.about_me or ''}
+            if (user.phone_number or '') != original_profile_data['phone_number']: profile_changes['phone_number'] = {'old': original_profile_data['phone_number'], 'new': user.phone_number or ''}
+            if (user.linkedin_url or '') != original_profile_data['linkedin_url']: profile_changes['linkedin_url'] = {'old': original_profile_data['linkedin_url'], 'new': user.linkedin_url or ''}
+            
+            if profile_changes:
+                 log_audit(action="Profile Updated", target_type="Employee", target_id=user.id, details=profile_changes)
+                 db.session.commit() # Commit log
+                 
             flash('Your profile has been updated.', 'success')
             return redirect(url_for('profile'))
         except Exception as e:
@@ -1434,3 +1652,16 @@ if __name__ == '__main__':
         # db.create_all() # Uncomment if you want to ensure tables on every run (might be slow)
         pass # Assuming init_db(app) handles table creation adequately
     app.run(debug=True) 
+
+@app.route('/admin/audit_log')
+@admin_required
+def admin_audit_log():
+    """Displays the audit log entries with pagination."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 25 # Show more logs per page
+    
+    log_query = AuditLog.query.order_by(desc(AuditLog.timestamp))
+    pagination = log_query.paginate(page=page, per_page=per_page, error_out=False)
+    logs = pagination.items
+    
+    return render_template('audit_log.html', logs=logs, pagination=pagination) 
