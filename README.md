@@ -311,8 +311,3 @@ Please ensure your code follows standard Python style guidelines (e.g., PEP 8) a
 
 ## License
 
-[Specify Your License Here - e.g., MIT License, Apache 2.0]
-
----
-
-*This README was generated based on the project structure and code analysis.*
