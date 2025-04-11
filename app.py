@@ -4,7 +4,7 @@
 # Version: 1.0
 
 # Standard library imports
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Third-party imports
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, after_this_request
@@ -107,6 +107,39 @@ class EmployeeSkill(db.Model):
     training_expiry_date = db.Column(db.Date)  # Calculated expiry date
     notes = db.Column(db.Text)  # Personal notes/comments about the skill
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def calculate_and_set_expiry_date(self):
+        """Calculates and sets the training expiry date based on the skill requirements."""
+        # Ensure the related skill object is loaded
+        if not self.skill:
+            # This might happen if the object is not fully loaded, e.g., detached from session
+            # You might need to handle this based on your application's logic,
+            # perhaps by reloading or querying the skill explicitly if needed.
+            # For now, we'll assume the skill relationship is usually available.
+            # If you encounter issues, consider eager loading 'skill' where EmployeeSkill is queried.
+            print(f"Warning: Skill relationship not loaded for EmployeeSkill ID {self.id}") # Added basic warning
+            self.training_expiry_date = None
+            return
+        
+        if self.skill.requires_training and self.skill.training_expiry_months and self.last_training_date:
+            # Using a slightly more robust way to calculate expiry date
+            # This handles month rollovers correctly
+            year = self.last_training_date.year + (self.last_training_date.month + self.skill.training_expiry_months - 1) // 12
+            month = (self.last_training_date.month + self.skill.training_expiry_months - 1) % 12 + 1
+            day = self.last_training_date.day
+            # Handle cases like adding months to Jan 31st resulting in an invalid date like Feb 31st
+            try:
+                self.training_expiry_date = datetime(year, month, day).date()
+            except ValueError:
+                # If the day is invalid for the calculated month (e.g., Feb 30th),
+                # set it to the last valid day of that month.
+                # Find the first day of the next month and subtract one day.
+                next_month_year = year + (month // 12)
+                next_month_month = (month % 12) + 1
+                last_day_of_month = datetime(next_month_year, next_month_month, 1).date() - timedelta(days=1)
+                self.training_expiry_date = last_day_of_month
+        else:
+            self.training_expiry_date = None # Ensure expiry date is None if conditions aren't met
 
 #------------------------------------------------------------------------------
 # CLI Commands for Database Management
@@ -261,40 +294,96 @@ def index():
     Display the main skills matrix.
     Admins see all employees, regular users see only their own skills.
     Supports searching employees by name, job title, or project.
+    Supports filtering by skill and minimum proficiency.
+    Uses pagination for the employee list if viewed by an admin.
     """
-    # Get search query
+    # Get search, filter, and page parameters
     search_query = request.args.get('search', '').strip()
+    filter_skill_id = request.args.get('skill_id', type=int)
+    # Default proficiency to 1 if a skill is selected, otherwise None
+    default_proficiency = 1 if filter_skill_id else None 
+    filter_min_proficiency = request.args.get('min_proficiency', default=default_proficiency, type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = 10 # Or get from config
     
+    # Fetch all skills for the filter dropdown
+    all_skills = Skill.query.order_by(Skill.name).all()
+    today = datetime.utcnow().date()
+
     # Base query depending on user type
     if session.get('is_admin', False):
         query = Employee.query
     else:
-        query = Employee.query.filter_by(id=session.get('employee_id'))
+        # Non-admins see only themselves, no pagination needed for a single record
+        employee = Employee.query.options(
+            joinedload(Employee.skills).joinedload(EmployeeSkill.skill),
+            joinedload(Employee.level_rel),
+            joinedload(Employee.project_rel)
+        ).filter_by(id=session.get('employee_id')).first_or_404()
+        
+        # Render a slightly different context or potentially a different template?
+        # For now, returning a list containing the single employee for template consistency.
+        return render_template('index.html', 
+                             employees=[employee], # Pass as a list
+                             skills=all_skills, 
+                             today=today,
+                             current_employee_id=session.get('employee_id'),
+                             is_admin=False,
+                             search_query=search_query,
+                             filter_skill_id=None, # No filters for single user view
+                             filter_min_proficiency=None,
+                             pagination=None) # No pagination for single user view
     
-    # Apply search if query exists
+    # --- Admin View Logic --- 
+    
+    # Apply search if query exists (only for admin view)
     if search_query:
         search = f"%{search_query}%"
         query = query.join(Project, Employee.project_id == Project.id, isouter=True).filter(
-            db.or_(
-                Employee.name.ilike(search),
-                Employee.job_title.ilike(search),
-                Employee.email.ilike(search),
-                Project.name.ilike(search)
+                db.or_(
+                    Employee.name.ilike(search),
+                    Employee.job_title.ilike(search),
+                    Employee.email.ilike(search),
+                    Project.name.ilike(search)
+                )
             )
+
+    # Apply skill filter if provided (only for admin view)
+    if filter_skill_id:
+        query = query.join(EmployeeSkill).filter(
+            EmployeeSkill.skill_id == filter_skill_id
         )
+        if filter_min_proficiency:
+            # Ensure proficiency is within a valid range (e.g., 1-5)
+            valid_proficiency = max(1, min(filter_min_proficiency, 5))
+            query = query.filter(EmployeeSkill.proficiency_level >= valid_proficiency)
+
+    # Eager load relationships needed in the template loop
+    # Apply options *after* filtering joins are established
+    query = query.options(
+        joinedload(Employee.skills).joinedload(EmployeeSkill.skill),
+        joinedload(Employee.level_rel),
+        joinedload(Employee.project_rel)
+    )
+
+    # Order and paginate (only for admin view)
+    pagination = query.order_by(Employee.name).paginate(
+        page=page, 
+        per_page=per_page, 
+        error_out=False
+    )
+    employees_paginated = pagination.items
     
-    # Get filtered employees
-    employees = query.all()
-    
-    skills = Skill.query.all()
-    today = datetime.utcnow().date()
     return render_template('index.html', 
-                         employees=employees, 
-                         skills=skills, 
+                         employees=employees_paginated, # Pass the items for the current page
+                         skills=all_skills, # Pass all skills for header AND filter
                          today=today,
                          current_employee_id=session.get('employee_id'),
-                         is_admin=session.get('is_admin', False),
-                         search_query=search_query)
+                         is_admin=True,
+                         search_query=search_query,
+                         filter_skill_id=filter_skill_id,
+                         filter_min_proficiency=filter_min_proficiency,
+                         pagination=pagination) # Pass the pagination object
 
 @app.route('/project/add', methods=['POST'])
 def add_project():
@@ -379,60 +468,99 @@ def update_employee_skills(employee_id):
     if not session.get('is_admin', False) and session.get('employee_id') != employee_id:
         flash('You can only update your own skills.', 'error')
         return redirect(url_for('index'))
-    
-    employee = Employee.query.get_or_404(employee_id)
-    skills = Skill.query.all()
-    
+
+    # Eager load skills and the related skill object for efficiency
+    employee = Employee.query.options(
+        joinedload(Employee.skills).joinedload(EmployeeSkill.skill)
+    ).get_or_404(employee_id)
+    all_skills = Skill.query.order_by(Skill.name).all() # Fetch all possible skills for the form
+
     if request.method == 'POST':
         try:
-            # Clear existing skills
-            EmployeeSkill.query.filter_by(employee_id=employee_id).delete()
-            
-            # Add new skills
-            for key, value in request.form.items():
-                if key.startswith('skill_'):
-                    skill_id = int(key.split('_')[1])
-                    level = int(value)
-                    
-                    # Get training date if provided
-                    training_date_key = f'training_date_{skill_id}'
-                    training_date = request.form.get(training_date_key)
-                    
-                    # Get notes if provided
-                    notes_key = f'notes_{skill_id}'
-                    notes = request.form.get(notes_key, '').strip()
-                    
-                    skill = Skill.query.get(skill_id)
-                    employee_skill = EmployeeSkill(
-                        employee_id=employee_id,
-                        skill_id=skill_id,
-                        proficiency_level=level,
-                        last_training_date=datetime.strptime(training_date, '%Y-%m-%d').date() if training_date else None,
-                        notes=notes if notes else None
-                    )
-                    
-                    # Calculate expiry date if applicable
-                    if skill.requires_training and skill.training_expiry_months and training_date:
-                        training_date_obj = datetime.strptime(training_date, '%Y-%m-%d').date()
-                        expiry_date = datetime(
-                            year=training_date_obj.year + ((training_date_obj.month + skill.training_expiry_months - 1) // 12),
-                            month=((training_date_obj.month + skill.training_expiry_months - 1) % 12) + 1,
-                            day=training_date_obj.day
-                        ).date()
-                        employee_skill.training_expiry_date = expiry_date
-                    
-                    db.session.add(employee_skill)
-            
+            # Get existing skills for this employee, keyed by skill_id
+            existing_employee_skills = {es.skill_id: es for es in employee.skills}
+            submitted_skill_ids = set()
+
+            # Process form data - iterate through all possible skills to handle checkboxes/radios correctly
+            for skill in all_skills:
+                skill_id = skill.id
+                level_str = request.form.get(f'skill_{skill_id}')
+
+                if level_str: # Skill was submitted (level selected)
+                    submitted_skill_ids.add(skill_id)
+                    level = int(level_str)
+
+                    # Get training date and notes if provided
+                    training_date_str = request.form.get(f'training_date_{skill_id}')
+                    notes = request.form.get(f'notes_{skill_id}', '').strip()
+                    last_training_date = None
+                    if training_date_str:
+                        try:
+                            last_training_date = datetime.strptime(training_date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            flash(f"Invalid date format for skill '{skill.name}'. Please use YYYY-MM-DD.", 'error')
+                            # Optionally, you could skip this skill or handle the error differently
+                            continue # Skip this skill update if date is invalid
+
+
+                    if skill_id in existing_employee_skills:
+                        # Update existing skill only if data has changed
+                        employee_skill = existing_employee_skills[skill_id]
+                        needs_update = False
+                        if employee_skill.proficiency_level != level:
+                            employee_skill.proficiency_level = level
+                            needs_update = True
+                        if employee_skill.last_training_date != last_training_date:
+                             employee_skill.last_training_date = last_training_date
+                             needs_update = True
+                        # Treat empty string notes as None for comparison
+                        current_notes = employee_skill.notes if employee_skill.notes else ''
+                        submitted_notes = notes if notes else ''
+                        if current_notes != submitted_notes:
+                             employee_skill.notes = notes if notes else None
+                             needs_update = True
+
+                        if needs_update:
+                            employee_skill.calculate_and_set_expiry_date() # Recalculate expiry
+                            db.session.add(employee_skill) # Add to session if updated (SQLAlchemy handles updates)
+
+                    else:
+                        # Add new skill
+                        # Skill object is already available from the 'all_skills' loop
+                        employee_skill = EmployeeSkill(
+                            employee_id=employee_id,
+                            skill_id=skill_id,
+                            proficiency_level=level,
+                            last_training_date=last_training_date,
+                            notes=notes if notes else None,
+                            skill=skill # Associate the skill object directly
+                        )
+                        employee_skill.calculate_and_set_expiry_date() # Calculate expiry
+                        db.session.add(employee_skill)
+
+            # Delete skills that were previously assigned but not in the form submission
+            skill_ids_to_delete = set(existing_employee_skills.keys()) - submitted_skill_ids
+            for skill_id in skill_ids_to_delete:
+                skill_to_delete = existing_employee_skills[skill_id]
+                db.session.delete(skill_to_delete)
+
             db.session.commit()
             flash('Skills updated successfully!', 'success')
-            return redirect(url_for('index'))
+            # Redirect to the employee's report page for better UX
+            return redirect(url_for('employee_report', employee_id=employee_id))
         except Exception as e:
             db.session.rollback()
             flash(f'Error updating skills: {str(e)}', 'error')
-    
-    return render_template('update_skills.html', 
-                         employee=employee, 
-                         skills=skills,
+            # Re-fetch employee data in case of error to render form correctly
+            employee = Employee.query.options(
+                joinedload(Employee.skills).joinedload(EmployeeSkill.skill)
+            ).get_or_404(employee_id)
+
+
+    # GET request or after error
+    return render_template('update_skills.html',
+                         employee=employee,
+                         skills=all_skills, # Pass all skills to the template
                          today=datetime.utcnow().date(),
                          is_admin=session.get('is_admin', False))
 
@@ -490,45 +618,16 @@ def admin():
         error_out=False
     )
     
-    # Render table templates
-    admin_users_table = render_template('_admin_users_table.html', 
-                                      admins=admins,
-                                      current_employee_id=session.get('employee_id'))
-    
-    employee_table = render_template('_employee_table.html',
-                                   employees=employees_paginated,
-                                   employee_search=employee_search)
-    
-    skills_table = render_template('_skills_table.html',
-                                 skills=skills_paginated,
-                                 skill_search=skill_search)
-    
-    projects_table = render_template('_projects_table.html',
-                                   projects=projects)
-    
-    levels_table = render_template('_levels_table.html',
-                                 levels=levels)
-    
-    # Render all modals
-    modals = render_template('_admin_modals.html',
-                           projects=projects,
-                           levels=levels)
-    
+    # Pass the necessary data directly to the main template
     return render_template('admin.html',
                          projects=projects,
                          levels=levels,
-                         skills=skills_paginated,
-                         employees=employees_paginated,
+                         skills=skills_paginated,  # Pass the paginated object
+                         employees=employees_paginated, # Pass the paginated object
                          admins=admins,
                          current_employee_id=session.get('employee_id'),
                          skill_search=skill_search,
-                         employee_search=employee_search,
-                         admin_users_table=admin_users_table,
-                         employee_table=employee_table,
-                         skills_table=skills_table,
-                         projects_table=projects_table,
-                         levels_table=levels_table,
-                         modals=modals)
+                         employee_search=employee_search)
 
 @app.route('/admin/project/add', methods=['POST'])
 @admin_required

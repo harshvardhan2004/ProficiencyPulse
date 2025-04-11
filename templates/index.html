@@ -8,23 +8,49 @@
         <h1 class="display-5 fw-bold text-primary mb-0">Skills Matrix</h1>
         <p class="text-muted mt-2">Track and manage team skills</p>
     </div>
-    <div class="col-md-4">
-        <form method="GET" class="search-form">
-            <div class="input-group">
-                <input type="text" 
-                       class="form-control" 
-                       placeholder="Search employees..." 
-                       name="search"
-                       value="{{ search_query }}"
-                       aria-label="Search employees">
-                <button class="btn btn-outline-primary" type="submit">
-                    <i class="fas fa-search"></i>
-                </button>
-                {% if search_query %}
-                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-times"></i>
-                    </a>
+    <div class="col-lg-6">
+        <form method="GET" class="search-form border rounded p-3 bg-light">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label for="search-input" class="form-label small">Search Employee</label>
+                    <input type="text" 
+                           id="search-input"
+                           class="form-control form-control-sm" 
+                           placeholder="Name, title, email..."
+                           name="search"
+                           value="{{ search_query }}"
+                           aria-label="Search employees">
+                </div>
+
+                {% if is_admin %}
+                <div class="col-md-3">
+                    <label for="skill-filter" class="form-label small">Skill</label>
+                    <select name="skill_id" id="skill-filter" class="form-select form-select-sm">
+                        <option value="">-- Any Skill --</option>
+                        {% for skill in skills %}
+                            <option value="{{ skill.id }}" {% if filter_skill_id == skill.id %}selected{% endif %}>{{ skill.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label for="proficiency-filter" class="form-label small">Min Proficiency</label>
+                    <select name="min_proficiency" id="proficiency-filter" class="form-select form-select-sm" {% if not filter_skill_id %}disabled{% endif %}>
+                        <option value="">-- Any --</option>
+                        {% for level in range(1, 6) %}
+                            <option value="{{ level }}" {% if filter_min_proficiency == level %}selected{% endif %}>{{ level }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 {% endif %}
+            </div>
+            <div class="d-flex justify-content-end mt-2">
+                <button class="btn btn-primary btn-sm me-2" type="submit">
+                    <i class="fas fa-filter me-1"></i>Apply
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-times me-1"></i>Clear
+                </a>
             </div>
         </form>
     </div>
@@ -151,6 +177,42 @@
     </div>
 {% endif %}
 
+{% if pagination and pagination.pages > 1 %}
+<nav aria-label="Employee pagination" class="mt-4 d-flex justify-content-center">
+  <ul class="pagination">
+    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('index', page=pagination.prev_num, search=search_query, skill_id=filter_skill_id, min_proficiency=filter_min_proficiency) if pagination.has_prev else '#' }}" aria-label="Previous">
+        <span aria-hidden="true">&laquo;</span>
+      </a>
+    </li>
+    
+    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+      {% if page_num %}
+        <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for('index', page=page_num, search=search_query, skill_id=filter_skill_id, min_proficiency=filter_min_proficiency) }}">{{ page_num }}</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+    {% endfor %}
+
+    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+      <a class="page-link" href="{{ url_for('index', page=pagination.next_num, search=search_query, skill_id=filter_skill_id, min_proficiency=filter_min_proficiency) if pagination.has_next else '#' }}" aria-label="Next">
+        <span aria-hidden="true">&raquo;</span>
+      </a>
+    </li>
+  </ul>
+</nav>
+<div class="text-center text-muted small">
+    Showing page {{ pagination.page }} of {{ pagination.pages }}. 
+    {% if search_query or filter_skill_id %}
+        (Filtered from {{ pagination.total }} total employees)
+    {% else %}
+        Total employees: {{ pagination.total }}
+    {% endif %}
+</div>
+{% endif %}
+
 <style>
 .avatar-initial {
     width: 40px;
@@ -193,10 +255,25 @@
 </style>
 
 <script>
-// Initialize tooltips
-var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-    return new bootstrap.Tooltip(tooltipTriggerEl)
-})
+document.addEventListener('DOMContentLoaded', function() {
+    const skillFilter = document.getElementById('skill-filter');
+    const proficiencyFilter = document.getElementById('proficiency-filter');
+
+    if (skillFilter && proficiencyFilter) {
+        skillFilter.addEventListener('change', function() {
+            if (this.value) {
+                proficiencyFilter.disabled = false;
+            } else {
+                proficiencyFilter.disabled = true;
+                proficiencyFilter.value = '';
+            }
+        });
+    }
+    
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+});
 </script>
 {% endblock %} 

@@ -75,7 +75,7 @@
                     </div>
                     <div class="card-body p-0">
                         <!-- Admin users table content -->
-                        {{ admin_users_table | safe }}
+                        {% include '_admin_users_table.html' %}
                     </div>
                 </div>
             </div>
@@ -115,7 +115,7 @@
                     </div>
                     <div class="card-body p-0">
                         <!-- Employee table content -->
-                        {{ employee_table | safe }}
+                        {% include '_employee_table.html' %}
                     </div>
                 </div>
             </div>
@@ -157,7 +157,7 @@
             </div>
             <div class="card-body p-0">
                 <!-- Skills table content -->
-                {{ skills_table | safe }}
+                {% include '_skills_table.html' %}
             </div>
         </div>
     </div>
@@ -178,7 +178,7 @@
                     </div>
                     <div class="card-body p-0">
                         <!-- Projects table content -->
-                        {{ projects_table | safe }}
+                        {% include '_projects_table.html' %}
                     </div>
                 </div>
             </div>
@@ -196,7 +196,7 @@
                     </div>
                     <div class="card-body p-0">
                         <!-- Levels table content -->
-                        {{ levels_table | safe }}
+                        {% include '_levels_table.html' %}
                     </div>
                 </div>
             </div>
@@ -250,7 +250,7 @@
 </div>
 
 <!-- Include all the existing modals -->
-{{ modals | safe }}
+{% include '_admin_modals.html' %}
 
 <style>
 /* Custom styling for tabs */
