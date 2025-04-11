@@ -71,6 +71,19 @@
                                 <label for="start_date">Start Date</label>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <select class="form-select" id="manager_id" name="manager_id">
+                                    <option value="">-- No Manager --</option>
+                                    {% for mgr in managers %}
+                                        <option value="{{ mgr.id }}">
+                                            {{ mgr.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <label for="manager_id">Line Manager</label>
+                            </div>
+                        </div>
                         <div class="col-12">
                             <hr class="my-4">
                             <div class="d-grid gap-2">

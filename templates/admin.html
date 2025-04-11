@@ -205,6 +205,32 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Help Email Configuration -->
+            <div class="col-12">
+                <div class="card">
+                     <div class="card-header bg-white py-3">
+                        <h5 class="card-title mb-0">System Settings</h5>
+                    </div>
+                    <div class="card-body">
+                         <form method="POST" action="{{ url_for('admin_update_config') }}">
+                             <div class="row align-items-end">
+                                 <div class="col-md-6">
+                                     <div class="form-floating">
+                                          <input type="email" class="form-control" id="helpEmail" name="help_email" value="{{ help_email }}">
+                                          <label for="helpEmail">"Get Help" Email Address</label>
+                                     </div>
+                                 </div>
+                                 <div class="col-auto">
+                                     <button type="submit" class="btn btn-primary">
+                                          <i class="fas fa-save me-2"></i>Update Email
+                                     </button>
+                                 </div>
+                             </div>
+                         </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -650,6 +676,28 @@ function editSkill(id, name, description, requiresTraining, expiryMonths, traini
         updateDisplay(); 
     }
 }
+</script>
+
+<!-- Script for Add Skill modal toggle -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addModal = document.getElementById('addSkillModal');
+    if (addModal) {
+        const checkbox = addModal.querySelector('input[name="requires_training"]');
+        // Find the specific section within the Add Modal
+        const detailsSection = addModal.querySelector('.training-details-section'); 
+
+        if (checkbox && detailsSection) {
+            const updateAddDisplay = () => {
+                detailsSection.style.display = checkbox.checked ? 'block' : 'none';
+            };
+
+            checkbox.addEventListener('change', updateAddDisplay);
+            // Set initial state for Add modal on load
+            updateAddDisplay(); 
+        }
+    }
+});
 </script>
 
 {% endblock %} 

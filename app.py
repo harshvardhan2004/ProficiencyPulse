@@ -30,6 +30,13 @@ app.config.from_object(config)
 init_db(app)
 migrate = Migrate(app, db)
 
+# Context processor to make settings available globally
+@app.context_processor
+def inject_global_config():
+    help_email_setting = Configuration.query.get('help_email')
+    help_email = help_email_setting.value if help_email_setting else ''
+    return dict(help_email=help_email)
+
 #------------------------------------------------------------------------------
 # Database Models
 #------------------------------------------------------------------------------
@@ -79,6 +86,10 @@ class Employee(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'))
     start_date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Manager Relationship
+    manager_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=True)
+    manager = db.relationship('Employee', remote_side=[id], backref='direct_reports')
     
     # Relationships
     skills = db.relationship('EmployeeSkill', backref='employee', lazy=True)
@@ -213,6 +224,11 @@ class AuditLog(db.Model):
     details = db.Column(JSON, nullable=True) # Store additional info like changes
 
     user = db.relationship('Employee') # Relationship to Employee
+
+# Model for Storing Configuration Settings
+class Configuration(db.Model):
+    key = db.Column(db.String(50), primary_key=True)
+    value = db.Column(db.Text, nullable=True)
 
 #------------------------------------------------------------------------------
 # CLI Commands for Database Management
@@ -536,6 +552,8 @@ def add_employee():
             level_id = request.form.get('level_id')
             project_id = request.form.get('project_id')
             start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
+            manager_id = request.form.get('manager_id')
+            manager_id = int(manager_id) if manager_id else None
             
             if name and email and job_title and level_id and start_date:
                 employee = Employee(
@@ -545,7 +563,8 @@ def add_employee():
                     job_title=job_title,
                     level_id=level_id,
                     project_id=project_id if project_id else None,
-                    start_date=start_date
+                    start_date=start_date,
+                    manager_id=manager_id # Save manager
                 )
                 db.session.add(employee)
                 # Flush to get the employee.id before creating history
@@ -572,7 +591,9 @@ def add_employee():
     
     projects = Project.query.order_by(Project.name).all()
     levels = Level.query.order_by(Level.order).all()
-    return render_template('add_employee.html', projects=projects, levels=levels)
+    # Fetch potential managers (all employees for now)
+    managers = Employee.query.order_by(Employee.name).all()
+    return render_template('add_employee.html', projects=projects, levels=levels, managers=managers)
 
 @app.route('/skill/add', methods=['GET', 'POST'])
 def add_skill():
@@ -753,6 +774,10 @@ def admin():
     add_skill_form = SkillForm() # Form for adding skills
     edit_skill_form = SkillForm() # Form for editing skills (will be populated by JS)
     
+    # Fetch current help email setting
+    help_email_setting = Configuration.query.get('help_email')
+    help_email = help_email_setting.value if help_email_setting else ''
+    
     # Use helper for Employee Query (no skill filter needed here, just search)
     # Pass None for skill filters to the helper
     employees_query = _get_filtered_employees_query(employee_search, None, None)
@@ -777,7 +802,8 @@ def admin():
                          skill_search=skill_search,
                          employee_search=employee_search,
                          add_skill_form=add_skill_form,
-                         edit_skill_form=edit_skill_form)
+                         edit_skill_form=edit_skill_form,
+                         help_email=help_email)
 
 @app.route('/admin/project/add', methods=['POST'])
 @admin_required
@@ -984,10 +1010,13 @@ def edit_employee(employee_id):
         'job_title': employee.job_title,
         'level_id': employee.level_id,
         'project_id': employee.project_id,
-        'start_date': employee.start_date.isoformat() if employee.start_date else None
+        'start_date': employee.start_date.isoformat() if employee.start_date else None,
+        'manager_id': employee.manager_id
     }
     projects = Project.query.order_by(Project.name).all()
     levels = Level.query.order_by(Level.order).all()
+    # Exclude the current employee from the list of potential managers
+    managers = Employee.query.filter(Employee.id != employee_id).order_by(Employee.name).all()
     
     if request.method == 'POST':
         try:
@@ -995,6 +1024,7 @@ def edit_employee(employee_id):
             original_job_title = employee.job_title
             original_level_id = employee.level_id
             original_project_id = employee.project_id
+            original_manager_id = employee.manager_id
             
             # Update employee attributes from form
             employee.name = request.form.get('name')
@@ -1007,13 +1037,16 @@ def edit_employee(employee_id):
             new_start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
             change_notes = request.form.get('change_notes', '').strip() # Get change notes
             new_role_start_date_str = request.form.get('new_role_start_date')
+            new_manager_id = request.form.get('manager_id')
+            new_manager_id = int(new_manager_id) if new_manager_id else None
             
             
             # Check if role-related info changed
             role_changed = (
                 new_job_title != original_job_title or \
                 new_level_id != original_level_id or \
-                new_project_id != original_project_id
+                new_project_id != original_project_id or \
+                new_manager_id != original_manager_id # Include manager change
             )
             
             # Apply changes to the employee object
@@ -1021,6 +1054,7 @@ def edit_employee(employee_id):
             employee.level_id = new_level_id
             employee.project_id = new_project_id
             employee.start_date = new_start_date # Update overall company start date if explicitly changed
+            employee.manager_id = new_manager_id # Update manager
             
             if role_changed:
                 # Parse and validate the new role start date
@@ -1034,6 +1068,7 @@ def edit_employee(employee_id):
                                          employee=employee, 
                                          projects=projects, 
                                          levels=levels, 
+                                         managers=managers, # Pass managers to template
                                          today_date_str=today_date_str)
                 
                 # Determine the reason for change
@@ -1049,6 +1084,7 @@ def edit_employee(employee_id):
                          else: change_reason.append("Level Change (Same Order)") # Or handle as needed
                     else: change_reason.append("Level Change") # Fallback
                 if new_project_id != original_project_id: change_reason.append("Project Change")
+                if new_manager_id != original_manager_id: change_reason.append("Manager Change") # Add reason
                 final_reason = ", ".join(change_reason) if change_reason else "Update"
                 
                 # Find current history record and end it
@@ -1062,7 +1098,7 @@ def edit_employee(employee_id):
                     if new_role_start <= current_history.start_date:
                        flash(f'New role start date ({new_role_start.strftime("%Y-%m-%d")}) cannot be on or before the previous role start date ({current_history.start_date.strftime("%Y-%m-%d")}).', 'error')
                        today_date_str = datetime.utcnow().date().strftime('%Y-%m-%d')
-                       return render_template('edit_employee.html', employee=employee, projects=projects, levels=levels, today_date_str=today_date_str)
+                       return render_template('edit_employee.html', employee=employee, projects=projects, levels=levels, managers=managers, today_date_str=today_date_str)
                        
                     current_history.end_date = new_role_start - timedelta(days=1) # End previous record the day before
                     db.session.add(current_history)
@@ -1089,6 +1125,7 @@ def edit_employee(employee_id):
             if employee.job_title != original_data['job_title']: changes['job_title'] = {'old': original_data['job_title'], 'new': employee.job_title}
             if employee.level_id != original_data['level_id']: changes['level_id'] = {'old': original_data['level_id'], 'new': employee.level_id}
             if employee.project_id != original_data['project_id']: changes['project_id'] = {'old': original_data['project_id'], 'new': employee.project_id}
+            if employee.manager_id != original_data['manager_id']: changes['manager_id'] = {'old': original_data['manager_id'], 'new': employee.manager_id}
             new_start_date_iso = employee.start_date.isoformat() if employee.start_date else None
             if new_start_date_iso != original_data['start_date']: changes['start_date'] = {'old': original_data['start_date'], 'new': new_start_date_iso}
             
@@ -1106,6 +1143,7 @@ def edit_employee(employee_id):
                          employee=employee,
                          projects=projects,
                          levels=levels,
+                         managers=managers, # Pass managers to template
                          today_date_str=today_date_str) # Pass today's date for default
 
 @app.route('/employee/report/<int:employee_id>')
@@ -1642,6 +1680,39 @@ def profile():
     return render_template('profile.html', form=form, title="User Profile")
 
 #------------------------------------------------------------------------------
+# Org Chart Route
+#------------------------------------------------------------------------------
+
+@app.route('/org-chart')
+@login_required
+def org_chart():
+    """Displays the organizational chart."""
+    employees = Employee.query.options(joinedload(Employee.manager)).all()
+    
+    # Prepare data for Google Charts
+    # [['Name {v: ID, f: DisplayName}', 'ManagerID', 'ToolTip'], ...]
+    chart_data = []
+    for emp in employees:
+        # Node ID and formatted name (v=value for linking, f=formatted display)
+        node_id = str(emp.id) # Use string ID for Google Charts
+        node_name = f"<div style='font-weight:bold;'>{emp.name}</div><div>{emp.job_title or ''}</div>"
+        node = {'v': node_id, 'f': node_name}
+        
+        # Manager ID (must be string)
+        manager_node_id = str(emp.manager_id) if emp.manager_id else ''
+        
+        # Tooltip (optional)
+        tooltip = emp.job_title or ''
+        
+        chart_data.append([node, manager_node_id, tooltip])
+
+    # Handle case where chart_data might be empty
+    if not chart_data:
+        chart_data.append(['No Employees', '', ''])
+        
+    return render_template('org_chart.html', chart_data=chart_data)
+
+#------------------------------------------------------------------------------
 # Application Entry Point
 #------------------------------------------------------------------------------
 
@@ -1664,4 +1735,39 @@ def admin_audit_log():
     pagination = log_query.paginate(page=page, per_page=per_page, error_out=False)
     logs = pagination.items
     
-    return render_template('audit_log.html', logs=logs, pagination=pagination) 
+    return render_template('audit_log.html', logs=logs, pagination=pagination)
+
+@app.route('/admin/config/update', methods=['POST'])
+@admin_required
+def admin_update_config():
+    """Updates configuration settings from the admin panel."""
+    try:
+        # Update Help Email
+        new_help_email = request.form.get('help_email', '').strip()
+        help_email_setting = Configuration.query.get('help_email')
+        
+        original_email = ''
+        if help_email_setting:
+            original_email = help_email_setting.value or ''
+            help_email_setting.value = new_help_email
+        else:
+            help_email_setting = Configuration(key='help_email', value=new_help_email)
+            db.session.add(help_email_setting)
+            
+        db.session.commit()
+        
+        # Log the change
+        if new_help_email != original_email:
+            log_details = {
+                'key': 'help_email', 
+                'old': original_email, 
+                'new': new_help_email
+            }
+            log_audit(action="Configuration Updated", target_type="Configuration", target_id=None, details=log_details)
+            db.session.commit() # Commit log
+            
+        flash('System settings updated successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating settings: {str(e)}', 'error')
+    return redirect(url_for('admin')) 
