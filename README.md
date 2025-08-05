@@ -38,41 +38,6 @@ ProficiencyPulse/
 └── README.md
 ```
 
-## ⚙️ Setup Instructions
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/harshvardhan2004/ProficiencyPulse.git
-cd ProficiencyPulse
-```
-
-### 2. Set up Python Virtual Environment
-```bash
-python -m venv venv
-venv\Scripts\activate   # On Windows
-```
-
-### 3. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. MySQL Setup
-
-Open MySQL Workbench and run:
-```sql
-CREATE DATABASE skills_matrix;
-CREATE USER 'skills'@'localhost' IDENTIFIED BY 'skills';
-GRANT ALL PRIVILEGES ON skills_matrix.* TO 'skills'@'localhost';
-```
-
-### 5. Run App
-
-```bash
-python app.py
-```
-
-Visit: `http://localhost:5000`
 
 
 ## 📚 Use Cases
@@ -91,6 +56,5 @@ Visit: `http://localhost:5000`
 ## 👨‍💻 Author
 
 **Harsh Vardhan**  
-[GitHub](https://github.com/harshvardhan2004) | [LinkedIn](#)
+[GitHub](https://github.com/harshvardhan2004) 
 
-## 🛡️ License
