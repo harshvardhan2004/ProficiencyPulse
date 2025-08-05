@@ -8,7 +8,8 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = environ.get('SECRET_KEY', 'dev-key')
-    SQLALCHEMY_DATABASE_URI = environ.get('DATABASE_URL', 'sqlite:///app.db')
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:123456@localhost/skillsmatrix'
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Session settings
@@ -24,7 +25,7 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     DB_USER = os.getenv('DB_USER', 'root')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+    DB_PASSWORD = os.getenv('DB_PASSWORD', '123456')
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_NAME = os.getenv('DB_NAME', 'skills_matrix')
     SQLALCHEMY_DATABASE_URI = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
