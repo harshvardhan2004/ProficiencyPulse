@@ -74,9 +74,6 @@ python app.py
 
 Visit: `http://localhost:5000`
 
-## 📸 Screenshots
-
-_Add your own screenshots here for extra credibility._
 
 ## 📚 Use Cases
 
@@ -97,9 +94,3 @@ _Add your own screenshots here for extra credibility._
 [GitHub](https://github.com/harshvardhan2004) | [LinkedIn](#)
 
 ## 🛡️ License
-
-This project is open-source. Free to use with credits.
-
-## ✅ Tip for Interview:
-When asked, say:
-> “I built this to simulate a real-world internal tool that companies use to manage teams. I used Flask and MySQL because that’s commonly used in backend-heavy startups. I wrote the whole thing myself and made it extensible so it can scale with features like user login and analytics.”
