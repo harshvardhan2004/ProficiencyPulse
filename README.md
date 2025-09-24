@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # 📊 ProficiencyPulse
 
 A Full Stack Web App to track, visualize, and manage team skills across different domains, roles, and experience levels.  
